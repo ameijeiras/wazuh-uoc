@@ -31,8 +31,8 @@ Basado en el trabajo previo del modelo de despliegue de Wazuh Inc. (https://gith
 
 ## License and copyright
 
-WAZUH
-Copyright (C) 2016-2021 Wazuh Inc.  (License GPLv2)
+angel[@]ameijeiras[.]es
+Copyright (C) 2021 angel[@]ameijeiras[.]es  (License GPLv2)
 
 ## References
 
