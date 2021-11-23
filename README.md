@@ -4,7 +4,7 @@
 Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implementado en Amazon EKS
 
 ## Architecture
-![Imagen de la arquitectura](https://github.com/ameijeiras/wazuh-uoc/blob/master/recursos/ArquitecturaTFMV1.drawio.png?raw=true)
+![Imagen de la arquitectura](https://github.com/ameijeiras/wazuh-uoc/blob/main/recursos/ArquitecturaTFMV1.drawio.png?raw=true)
 
 ## Documentation
 
