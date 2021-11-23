@@ -1,0 +1,1320 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wazuh
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: wazuh-storage
+parameters:
+  encrypted: "true"
+  type: gp2
+provisioner: kubernetes.io/aws-ebs
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+data:
+  elasticsearch.yml: |
+    cluster.name: ${CLUSTER_NAME}
+    node.name: ${NODE_NAME}
+    network.host: ${NETWORK_HOST}
+    discovery.seed_hosts: wazuh-elasticsearch-0.wazuh-elasticsearch
+    cluster.initial_master_nodes:
+      - wazuh-elasticsearch-0
+
+    opendistro_security.ssl.transport.enabled: true
+    opendistro_security.ssl.transport.pemcert_filepath: node.pem
+    opendistro_security.ssl.transport.pemkey_filepath: node-key.pem
+    opendistro_security.ssl.transport.pemtrustedcas_filepath: root-ca.pem
+    opendistro_security.ssl.transport.enforce_hostname_verification: false
+    opendistro_security.ssl.http.enabled: true
+    opendistro_security.ssl.http.pemcert_filepath: node.pem
+    opendistro_security.ssl.http.pemkey_filepath: node-key.pem
+    opendistro_security.ssl.http.pemtrustedcas_filepath: root-ca.pem
+    opendistro_security.audit.type: internal_elasticsearch
+    opendistro_security.audit.config.index: "'security-auditlog-'YYYY.MM"
+    opendistro_security.allow_default_init_securityindex: true
+    opendistro_security.authcz.admin_dn:
+      - CN=admin,O=Company,L=California,C=US
+    opendistro_security.nodes_dn:
+      - CN=*.elasticsearch,O=Company,L=California,C=US
+    opendistro_security.enable_snapshot_restore_privilege: true
+    opendistro_security.check_snapshot_restore_write_privileges: true
+    opendistro_security.restapi.roles_enabled: ["all_access", "security_rest_api_access", "service_full_access"]
+
+    cluster.routing.allocation.disk.threshold_enabled: false
+  internal_users.yml: |
+    ---
+    # This is the internal user database
+    # The hash value is a bcrypt hash and can be generated with plugin/tools/hash.sh
+
+    _meta:
+      type: "internalusers"
+      config_version: 2
+
+    # Define your internal users here
+
+    ## Demo users
+
+    admin:
+      hash: "$2y$12$K/SpwjtB.wOHJ/Nc6GVRDuc1h0rM1DfvziFRNPtk27P.c4yDr9njO"
+      reserved: true
+      backend_roles:
+      - "admin"
+      description: "Demo admin user"
+
+    kibanaserver:
+      hash: "$2a$12$4AcgAt3xwOWadA5s5blL6ev39OXDNhmOesEoo33eZtrq2N0YrU3H."
+      reserved: true
+      description: "Demo kibanaserver user"
+
+    kibanaro:
+      hash: "$2a$12$JJSXNfTowz7Uu5ttXfeYpeYE0arACvcwlPBStB1F.MI7f0U9Z4DGC"
+      reserved: false
+      backend_roles:
+      - "kibanauser"
+      - "readall"
+      attributes:
+        attribute1: "value1"
+        attribute2: "value2"
+        attribute3: "value3"
+      description: "Demo kibanaro user"
+
+    logstash:
+      hash: "$2a$12$u1ShR4l4uBS3Uv59Pa2y5.1uQuZBrZtmNfqB3iM/.jL0XoV9sghS2"
+      reserved: false
+      backend_roles:
+      - "logstash"
+      description: "Demo logstash user"
+
+    readall:
+      hash: "$2a$12$ae4ycwzwvLtZxwZ82RmiEunBbIPiAmGZduBAjKN0TXdwQFtCwARz2"
+      reserved: false
+      backend_roles:
+      - "readall"
+      description: "Demo readall user"
+
+    snapshotrestore:
+      hash: "$2y$12$DpwmetHKwgYnorbgdvORCenv4NAK8cPUg8AI6pxLCuWf/ALc0.v7W"
+      reserved: false
+      backend_roles:
+      - "snapshotrestore"
+      description: "Demo snapshotrestore user"
+kind: ConfigMap
+metadata:
+  name: elastic-odfe-conf-5b9hg68586
+  namespace: wazuh
+---
+apiVersion: v1
+data:
+  master.conf: "<!--\n  Wazuh - Manager - Default configuration for ubuntu 16.04\n
+    \ More info at: https://documentation.wazuh.com\n  Mailing list: https://groups.google.com/forum/#!forum/wazuh\n\n
+    \ Customization: TCP on port 1514\n  Customization: Cluster mode enabled, master
+    node\n-->\n<ossec_config>\n  <global>\n    <jsonout_output>yes</jsonout_output>\n
+    \   <alerts_log>yes</alerts_log>\n    <logall>no</logall>\n    <logall_json>no</logall_json>\n
+    \   <email_notification>no</email_notification>\n    <smtp_server>smtp.example.wazuh.com</smtp_server>\n
+    \   <email_from>ossecm@example.wazuh.com</email_from>\n    <email_to>recipient@example.wazuh.com</email_to>\n
+    \   <email_maxperhour>12</email_maxperhour>\n    <email_log_source>alerts.log</email_log_source>\n
+    \   <queue_size>131072</queue_size>\n    <agents_disconnection_time>20s</agents_disconnection_time>\n
+    \   <agents_disconnection_alert_time>100s</agents_disconnection_alert_time>\n
+    \ </global>\n\n  <alerts>\n    <log_alert_level>3</log_alert_level>\n    <email_alert_level>12</email_alert_level>\n
+    \ </alerts>\n\n  <!-- Choose between \"plain\", \"json\", or \"plain,json\" for
+    the format of internal logs -->\n  <logging>\n    <log_format>plain</log_format>\n
+    \ </logging>\n\n  <remote>\n    <connection>secure</connection>\n    <port>1514</port>\n
+    \   <protocol>tcp</protocol>\n    <queue_size>131072</queue_size>\n  </remote>\n\n
+    \ <!-- Policy monitoring -->\n  <rootcheck>\n    <disabled>no</disabled>\n    <check_unixaudit>yes</check_unixaudit>\n
+    \   <check_files>yes</check_files>\n    <check_trojans>yes</check_trojans>\n    <check_dev>yes</check_dev>\n
+    \   <check_sys>yes</check_sys>\n    <check_pids>yes</check_pids>\n    <check_ports>yes</check_ports>\n
+    \   <check_if>yes</check_if>\n\n    <!-- Frequency that rootcheck is executed
+    - every 12 hours -->\n    <frequency>43200</frequency>\n\n    <rootkit_files>/var/ossec/etc/rootcheck/rootkit_files.txt</rootkit_files>\n
+    \   <rootkit_trojans>/var/ossec/etc/rootcheck/rootkit_trojans.txt</rootkit_trojans>\n\n
+    \   <system_audit>/var/ossec/etc/rootcheck/system_audit_rcl.txt</system_audit>\n
+    \   <system_audit>/var/ossec/etc/rootcheck/system_audit_ssh.txt</system_audit>\n\n
+    \   <skip_nfs>yes</skip_nfs>\n  </rootcheck>\n\n  <wodle name=\"open-scap\">\n
+    \   <disabled>yes</disabled>\n    <timeout>1800</timeout>\n    <interval>1d</interval>\n
+    \   <scan-on-start>yes</scan-on-start>\n  </wodle>\n\n  <wodle name=\"cis-cat\">\n
+    \   <disabled>yes</disabled>\n    <timeout>1800</timeout>\n    <interval>1d</interval>\n
+    \   <scan-on-start>yes</scan-on-start>\n\n    <java_path>wodles/java</java_path>\n
+    \   <ciscat_path>wodles/ciscat</ciscat_path>\n  </wodle>\n\n  <!-- Osquery integration
+    -->\n  <wodle name=\"osquery\">\n    <disabled>yes</disabled>\n    <run_daemon>yes</run_daemon>\n
+    \   <log_path>/var/log/osquery/osqueryd.results.log</log_path>\n    <config_path>/etc/osquery/osquery.conf</config_path>\n
+    \   <add_labels>yes</add_labels>\n  </wodle>\n\n  <!-- System inventory -->\n
+    \ <wodle name=\"syscollector\">\n    <disabled>no</disabled>\n    <interval>1h</interval>\n
+    \   <scan_on_start>yes</scan_on_start>\n    <hardware>yes</hardware>\n    <os>yes</os>\n
+    \   <network>yes</network>\n    <packages>yes</packages>\n    <ports all=\"no\">yes</ports>\n
+    \   <processes>yes</processes>\n  </wodle>\n\n  <vulnerability-detector>\n      <enabled>no</enabled>\n
+    \     <interval>5m</interval>\n      <ignore_time>6h</ignore_time>\n      <run_on_start>yes</run_on_start>\n\n
+    \     <!-- Ubuntu OS vulnerabilities -->\n      <provider name=\"canonical\">\n
+    \       <enabled>no</enabled>\n        <os>trusty</os>\n        <os>xenial</os>\n
+    \       <os>bionic</os>\n        <os>focal</os>\n        <update_interval>1h</update_interval>\n
+    \     </provider>\n\n      <!-- Debian OS vulnerabilities -->\n      <provider
+    name=\"debian\">\n        <enabled>no</enabled>\n        <os>stretch</os>\n        <os>buster</os>\n
+    \       <update_interval>1h</update_interval>\n      </provider>\n\n      <!--
+    RedHat OS vulnerabilities -->\n      <provider name=\"redhat\">\n        <enabled>no</enabled>\n
+    \       <os>5</os>\n        <os>6</os>\n        <os>7</os>\n        <os>8</os>\n
+    \       <update_interval>1h</update_interval>\n      </provider>\n\n      <!--
+    Windows OS vulnerabilities -->\n      <provider name=\"msu\">\n        <enabled>yes</enabled>\n
+    \       <update_interval>1h</update_interval>\n      </provider>\n\n      <!--
+    Aggregate vulnerabilities -->\n      <provider name=\"nvd\">\n        <enabled>yes</enabled>\n
+    \       <update_from_year>2010</update_from_year>\n        <update_interval>1h</update_interval>\n
+    \     </provider>\n\n  </vulnerability-detector>\n\n\n  <!-- File integrity monitoring
+    -->\n  <syscheck>\n    <disabled>no</disabled>\n\n    <!-- Frequency that syscheck
+    is executed default every 12 hours -->\n    <frequency>43200</frequency>\n\n    <scan_on_start>yes</scan_on_start>\n\n
+    \   <!-- Generate alert when new file detected -->\n    <alert_new_files>yes</alert_new_files>\n\n
+    \   <!-- Don't ignore files that change more than 'frequency' times -->\n    <auto_ignore
+    frequency=\"10\" timeframe=\"3600\">no</auto_ignore>\n\n    <!-- Directories to
+    check  (perform all possible verifications) -->\n    <directories check_all=\"yes\">/etc,/usr/bin,/usr/sbin</directories>\n
+    \   <directories check_all=\"yes\">/bin,/sbin,/boot</directories>\n\n    <!--
+    Files/directories to ignore -->\n    <ignore>/etc/mtab</ignore>\n    <ignore>/etc/hosts.deny</ignore>\n
+    \   <ignore>/etc/mail/statistics</ignore>\n    <ignore>/etc/random-seed</ignore>\n
+    \   <ignore>/etc/random.seed</ignore>\n    <ignore>/etc/adjtime</ignore>\n    <ignore>/etc/httpd/logs</ignore>\n
+    \   <ignore>/etc/utmpx</ignore>\n    <ignore>/etc/wtmpx</ignore>\n    <ignore>/etc/cups/certs</ignore>\n
+    \   <ignore>/etc/dumpdates</ignore>\n    <ignore>/etc/svc/volatile</ignore>\n
+    \   <ignore>/sys/kernel/security</ignore>\n    <ignore>/sys/kernel/debug</ignore>\n\n
+    \   <!-- Check the file, but never compute the diff -->\n    <nodiff>/etc/ssl/private.key</nodiff>\n\n
+    \   <skip_nfs>yes</skip_nfs>\n\n    <!-- Remove not monitored files -->\n    <remove_old_diff>yes</remove_old_diff>\n\n
+    \   <!-- Allow the system to restart Auditd after installing the plugin -->\n
+    \   <restart_audit>yes</restart_audit>\n  </syscheck>\n\n  <!-- Active response
+    -->\n  <global>\n    <white_list>127.0.0.1</white_list>\n    <white_list>^localhost.localdomain$</white_list>\n
+    \   <white_list>10.66.0.2</white_list>\n  </global>\n\n  <command>\n    <name>disable-account</name>\n
+    \   <executable>disable-account.sh</executable>\n    <expect>user</expect>\n    <timeout_allowed>yes</timeout_allowed>\n
+    \ </command>\n\n  <command>\n    <name>restart-ossec</name>\n    <executable>restart-ossec.sh</executable>\n
+    \   <expect></expect>\n  </command>\n\n  <command>\n    <name>firewall-drop</name>\n
+    \   <executable>firewall-drop.sh</executable>\n    <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n
+    \ </command>\n\n  <command>\n    <name>host-deny</name>\n    <executable>host-deny.sh</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>route-null</name>\n    <executable>route-null.sh</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>win_route-null</name>\n    <executable>route-null.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>win_route-null-2012</name>\n    <executable>route-null-2012.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>netsh</name>\n    <executable>netsh.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>netsh-win-2016</name>\n    <executable>netsh-win-2016.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <!--\n  <active-response>\n    active-response options here\n  </active-response>\n
+    \ -->\n\n  <!-- Log analysis -->\n  <localfile>\n    <log_format>command</log_format>\n
+    \   <command>df -P</command>\n    <frequency>360</frequency>\n  </localfile>\n\n
+    \ <localfile>\n    <log_format>full_command</log_format>\n    <command>netstat
+    -tulpn | sed 's/\\([[:alnum:]]\\+\\)\\ \\+[[:digit:]]\\+\\ \\+[[:digit:]]\\+\\
+    \\+\\(.*\\):\\([[:digit:]]*\\)\\ \\+\\([0-9\\.\\:\\*]\\+\\).\\+\\ \\([[:digit:]]*\\/[[:alnum:]\\-]*\\).*/\\1
+    \\2 == \\3 == \\4 \\5/' | sort -k 4 -g | sed 's/ == \\(.*\\) ==/:\\1/' | sed 1,2d</command>\n
+    \   <alias>netstat listening ports</alias>\n    <frequency>360</frequency>\n  </localfile>\n\n
+    \ <localfile>\n    <log_format>full_command</log_format>\n    <command>last -n
+    20</command>\n    <frequency>360</frequency>\n  </localfile>\n\n  <ruleset>\n
+    \   <!-- Default ruleset -->\n    <decoder_dir>ruleset/decoders</decoder_dir>\n
+    \   <rule_dir>ruleset/rules</rule_dir>\n    <rule_exclude>0215-policy_rules.xml</rule_exclude>\n
+    \   <list>etc/lists/audit-keys</list>\n    <list>etc/lists/amazon/aws-sources</list>\n
+    \   <list>etc/lists/amazon/aws-eventnames</list>\n\n    <!-- User-defined ruleset
+    -->\n    <decoder_dir>etc/decoders</decoder_dir>\n    <rule_dir>etc/rules</rule_dir>\n
+    \ </ruleset>\n\n  <rule_test>\n\t    <enabled>yes</enabled>\n\t    <threads>1</threads>\n\t
+    \   <max_sessions>64</max_sessions>\n\t    <session_timeout>15m</session_timeout>\n
+    \ </rule_test>\n\n  <!-- Configuration for ossec-authd\n    To enable this service,
+    run:\n    wazuh-control enable auth\n  -->\n  <auth>\n    <disabled>no</disabled>\n
+    \   <port>1515</port>\n    <use_source_ip>no</use_source_ip>\n    <force_insert>no</force_insert>\n
+    \   <force_time>0</force_time>\n    <purge>no</purge>\n    <use_password>yes</use_password>\n
+    \   <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>\n    <!--
+    <ssl_agent_ca></ssl_agent_ca> -->\n    <ssl_verify_host>no</ssl_verify_host>\n
+    \   <ssl_manager_cert>/var/ossec/etc/sslmanager.cert</ssl_manager_cert>\n    <ssl_manager_key>/var/ossec/etc/sslmanager.key</ssl_manager_key>\n
+    \   <ssl_auto_negotiate>no</ssl_auto_negotiate>\n  </auth>\n\n  <cluster>\n    <name>wazuh</name>\n
+    \   <node_name>wazuh-manager-master</node_name>\n    <node_type>master</node_type>\n
+    \   <key>to_be_replaced_by_cluster_key</key>\n    <port>1516</port>\n    <bind_addr>0.0.0.0</bind_addr>\n
+    \   <nodes>\n        <node>wazuh-manager-master-0.wazuh-cluster.wazuh</node>\n
+    \   </nodes>\n    <hidden>no</hidden>\n    <disabled>no</disabled>\n  </cluster>\n</ossec_config>\n\n<ossec_config>\n
+    \ <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/ossec/logs/active-responses.log</location>\n
+    \ </localfile>\n\n  <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/log/syslog</location>\n
+    \ </localfile>\n\n  <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/log/dpkg.log</location>\n
+    \ </localfile>\n</ossec_config>"
+  worker.conf: "<!--\n  Wazuh - Manager - Default configuration for ubuntu 16.04\n
+    \ More info at: https://documentation.wazuh.com\n  Mailing list: https://groups.google.com/forum/#!forum/wazuh\n\n
+    \ Customization: TCP on port 1514\n  Customization: Cluster mode enabled, worker
+    node\n-->\n<ossec_config>\n  <global>\n    <jsonout_output>yes</jsonout_output>\n
+    \   <alerts_log>yes</alerts_log>\n    <logall>no</logall>\n    <logall_json>no</logall_json>\n
+    \   <email_notification>no</email_notification>\n    <smtp_server>smtp.example.wazuh.com</smtp_server>\n
+    \   <email_from>ossecm@example.wazuh.com</email_from>\n    <email_to>recipient@example.wazuh.com</email_to>\n
+    \   <email_maxperhour>12</email_maxperhour>\n    <email_log_source>alerts.log</email_log_source>\n
+    \   <queue_size>131072</queue_size>\n    <agents_disconnection_time>20s</agents_disconnection_time>\n
+    \   <agents_disconnection_alert_time>100s</agents_disconnection_alert_time>\n
+    \ </global>\n\n  <alerts>\n    <log_alert_level>3</log_alert_level>\n    <email_alert_level>12</email_alert_level>\n
+    \ </alerts>\n\n  <!-- Choose between \"plain\", \"json\", or \"plain,json\" for
+    the format of internal logs -->\n  <logging>\n    <log_format>plain</log_format>\n
+    \ </logging>\n\n  <remote>\n    <connection>secure</connection>\n    <port>1514</port>\n
+    \   <protocol>tcp</protocol>\n    <queue_size>131072</queue_size>\n  </remote>\n\n
+    \ <!-- Policy monitoring -->\n  <rootcheck>\n    <disabled>no</disabled>\n    <check_unixaudit>yes</check_unixaudit>\n
+    \   <check_files>yes</check_files>\n    <check_trojans>yes</check_trojans>\n    <check_dev>yes</check_dev>\n
+    \   <check_sys>yes</check_sys>\n    <check_pids>yes</check_pids>\n    <check_ports>yes</check_ports>\n
+    \   <check_if>yes</check_if>\n\n    <!-- Frequency that rootcheck is executed
+    - every 12 hours -->\n    <frequency>43200</frequency>\n\n    <rootkit_files>/var/ossec/etc/rootcheck/rootkit_files.txt</rootkit_files>\n
+    \   <rootkit_trojans>/var/ossec/etc/rootcheck/rootkit_trojans.txt</rootkit_trojans>\n\n
+    \   <system_audit>/var/ossec/etc/rootcheck/system_audit_rcl.txt</system_audit>\n
+    \   <system_audit>/var/ossec/etc/rootcheck/system_audit_ssh.txt</system_audit>\n\n
+    \   <skip_nfs>yes</skip_nfs>\n  </rootcheck>\n\n  <wodle name=\"open-scap\">\n
+    \   <disabled>yes</disabled>\n    <timeout>1800</timeout>\n    <interval>1d</interval>\n
+    \   <scan-on-start>yes</scan-on-start>\n  </wodle>\n\n  <wodle name=\"cis-cat\">\n
+    \   <disabled>yes</disabled>\n    <timeout>1800</timeout>\n    <interval>1d</interval>\n
+    \   <scan-on-start>yes</scan-on-start>\n\n    <java_path>wodles/java</java_path>\n
+    \   <ciscat_path>wodles/ciscat</ciscat_path>\n  </wodle>\n\n  <!-- Osquery integration
+    -->\n  <wodle name=\"osquery\">\n    <disabled>yes</disabled>\n    <run_daemon>yes</run_daemon>\n
+    \   <log_path>/var/log/osquery/osqueryd.results.log</log_path>\n    <config_path>/etc/osquery/osquery.conf</config_path>\n
+    \   <add_labels>yes</add_labels>\n  </wodle>\n\n  <!-- System inventory -->\n
+    \ <wodle name=\"syscollector\">\n    <disabled>no</disabled>\n    <interval>1h</interval>\n
+    \   <scan_on_start>yes</scan_on_start>\n    <hardware>yes</hardware>\n    <os>yes</os>\n
+    \   <network>yes</network>\n    <packages>yes</packages>\n    <ports all=\"no\">yes</ports>\n
+    \   <processes>yes</processes>\n  </wodle>\n\n  <vulnerability-detector>\n      <enabled>no</enabled>\n
+    \     <interval>5m</interval>\n      <ignore_time>6h</ignore_time>\n      <run_on_start>yes</run_on_start>\n\n
+    \     <!-- Ubuntu OS vulnerabilities -->\n      <provider name=\"canonical\">\n
+    \       <enabled>no</enabled>\n        <os>trusty</os>\n        <os>xenial</os>\n
+    \       <os>bionic</os>\n        <os>focal</os>\n        <update_interval>1h</update_interval>\n
+    \     </provider>\n\n      <!-- Debian OS vulnerabilities -->\n      <provider
+    name=\"debian\">\n        <enabled>no</enabled>\n        <os>stretch</os>\n        <os>buster</os>\n
+    \       <update_interval>1h</update_interval>\n      </provider>\n\n      <!--
+    RedHat OS vulnerabilities -->\n      <provider name=\"redhat\">\n        <enabled>no</enabled>\n
+    \       <os>5</os>\n        <os>6</os>\n        <os>7</os>\n        <os>8</os>\n
+    \       <update_interval>1h</update_interval>\n      </provider>\n\n      <!--
+    Windows OS vulnerabilities -->\n      <provider name=\"msu\">\n        <enabled>yes</enabled>\n
+    \       <update_interval>1h</update_interval>\n      </provider>\n\n      <!--
+    Aggregate vulnerabilities -->\n      <provider name=\"nvd\">\n        <enabled>yes</enabled>\n
+    \       <update_from_year>2010</update_from_year>\n        <update_interval>1h</update_interval>\n
+    \     </provider>\n\n  </vulnerability-detector>\n\n  <!-- File integrity monitoring
+    -->\n  <syscheck>\n    <disabled>no</disabled>\n\n    <!-- Frequency that syscheck
+    is executed default every 12 hours -->\n    <frequency>43200</frequency>\n\n    <scan_on_start>yes</scan_on_start>\n\n
+    \   <!-- Generate alert when new file detected -->\n    <alert_new_files>yes</alert_new_files>\n\n
+    \   <!-- Don't ignore files that change more than 'frequency' times -->\n    <auto_ignore
+    frequency=\"10\" timeframe=\"3600\">no</auto_ignore>\n\n    <!-- Directories to
+    check  (perform all possible verifications) -->\n    <directories check_all=\"yes\">/etc,/usr/bin,/usr/sbin</directories>\n
+    \   <directories check_all=\"yes\">/bin,/sbin,/boot</directories>\n\n    <!--
+    Files/directories to ignore -->\n    <ignore>/etc/mtab</ignore>\n    <ignore>/etc/hosts.deny</ignore>\n
+    \   <ignore>/etc/mail/statistics</ignore>\n    <ignore>/etc/random-seed</ignore>\n
+    \   <ignore>/etc/random.seed</ignore>\n    <ignore>/etc/adjtime</ignore>\n    <ignore>/etc/httpd/logs</ignore>\n
+    \   <ignore>/etc/utmpx</ignore>\n    <ignore>/etc/wtmpx</ignore>\n    <ignore>/etc/cups/certs</ignore>\n
+    \   <ignore>/etc/dumpdates</ignore>\n    <ignore>/etc/svc/volatile</ignore>\n
+    \   <ignore>/sys/kernel/security</ignore>\n    <ignore>/sys/kernel/debug</ignore>\n\n
+    \   <!-- Check the file, but never compute the diff -->\n    <nodiff>/etc/ssl/private.key</nodiff>\n\n
+    \   <skip_nfs>yes</skip_nfs>\n\n    <!-- Remove not monitored files -->\n    <remove_old_diff>yes</remove_old_diff>\n\n
+    \   <!-- Allow the system to restart Auditd after installing the plugin -->\n
+    \   <restart_audit>yes</restart_audit>\n  </syscheck>\n\n  <!-- Active response
+    -->\n  <global>\n    <white_list>127.0.0.1</white_list>\n    <white_list>^localhost.localdomain$</white_list>\n
+    \   <white_list>10.66.0.2</white_list>\n  </global>\n\n  <command>\n    <name>disable-account</name>\n
+    \   <executable>disable-account.sh</executable>\n    <expect>user</expect>\n    <timeout_allowed>yes</timeout_allowed>\n
+    \ </command>\n\n  <command>\n    <name>restart-ossec</name>\n    <executable>restart-ossec.sh</executable>\n
+    \   <expect></expect>\n  </command>\n\n  <command>\n    <name>firewall-drop</name>\n
+    \   <executable>firewall-drop.sh</executable>\n    <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n
+    \ </command>\n\n  <command>\n    <name>host-deny</name>\n    <executable>host-deny.sh</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>route-null</name>\n    <executable>route-null.sh</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>win_route-null</name>\n    <executable>route-null.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>win_route-null-2012</name>\n    <executable>route-null-2012.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>netsh</name>\n    <executable>netsh.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <command>\n    <name>netsh-win-2016</name>\n    <executable>netsh-win-2016.cmd</executable>\n
+    \   <expect>srcip</expect>\n    <timeout_allowed>yes</timeout_allowed>\n  </command>\n\n
+    \ <!--\n  <active-response>\n    active-response options here\n  </active-response>\n
+    \ -->\n\n  <!-- Log analysis -->\n  <localfile>\n    <log_format>command</log_format>\n
+    \   <command>df -P</command>\n    <frequency>360</frequency>\n  </localfile>\n\n
+    \ <localfile>\n    <log_format>full_command</log_format>\n    <command>netstat
+    -tulpn | sed 's/\\([[:alnum:]]\\+\\)\\ \\+[[:digit:]]\\+\\ \\+[[:digit:]]\\+\\
+    \\+\\(.*\\):\\([[:digit:]]*\\)\\ \\+\\([0-9\\.\\:\\*]\\+\\).\\+\\ \\([[:digit:]]*\\/[[:alnum:]\\-]*\\).*/\\1
+    \\2 == \\3 == \\4 \\5/' | sort -k 4 -g | sed 's/ == \\(.*\\) ==/:\\1/' | sed 1,2d</command>\n
+    \   <alias>netstat listening ports</alias>\n    <frequency>360</frequency>\n  </localfile>\n\n
+    \ <localfile>\n    <log_format>full_command</log_format>\n    <command>last -n
+    20</command>\n    <frequency>360</frequency>\n  </localfile>\n\n  <ruleset>\n
+    \   <!-- Default ruleset -->\n    <decoder_dir>ruleset/decoders</decoder_dir>\n
+    \   <rule_dir>ruleset/rules</rule_dir>\n    <rule_exclude>0215-policy_rules.xml</rule_exclude>\n
+    \   <list>etc/lists/audit-keys</list>\n    <list>etc/lists/amazon/aws-sources</list>\n
+    \   <list>etc/lists/amazon/aws-eventnames</list>\n\n    <!-- User-defined ruleset
+    -->\n    <decoder_dir>etc/decoders</decoder_dir>\n    <rule_dir>etc/rules</rule_dir>\n
+    \ </ruleset>\n\n  <rule_test>\n\t    <enabled>yes</enabled>\n\t    <threads>1</threads>\n\t
+    \   <max_sessions>64</max_sessions>\n\t    <session_timeout>15m</session_timeout>\n
+    \ </rule_test>\n\n  <!-- Configuration for ossec-authd\n    To enable this service,
+    run:\n    wazuh-control enable auth\n  -->\n  <auth>\n    <disabled>no</disabled>\n
+    \   <port>1515</port>\n    <use_source_ip>no</use_source_ip>\n    <force_insert>no</force_insert>\n
+    \   <force_time>0</force_time>\n    <purge>no</purge>\n    <use_password>no</use_password>\n
+    \   <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>\n    <!--
+    <ssl_agent_ca></ssl_agent_ca> -->\n    <ssl_verify_host>no</ssl_verify_host>\n
+    \   <ssl_manager_cert>/var/ossec/etc/sslmanager.cert</ssl_manager_cert>\n    <ssl_manager_key>/var/ossec/etc/sslmanager.key</ssl_manager_key>\n
+    \   <ssl_auto_negotiate>no</ssl_auto_negotiate>\n  </auth>\n\n  <cluster>\n    <name>wazuh</name>\n
+    \   <node_name>to_be_replaced_by_hostname</node_name>\n    <node_type>worker</node_type>\n
+    \   <key>to_be_replaced_by_cluster_key</key>\n    <port>1516</port>\n    <bind_addr>0.0.0.0</bind_addr>\n
+    \   <nodes>\n        <node>wazuh-manager-master-0.wazuh-cluster.wazuh</node>\n
+    \   </nodes>\n    <hidden>no</hidden>\n    <disabled>no</disabled>\n  </cluster>\n</ossec_config>\n\n<ossec_config>\n
+    \ <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/ossec/logs/active-responses.log</location>\n
+    \ </localfile>\n\n  <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/log/syslog</location>\n
+    \ </localfile>\n\n  <localfile>\n    <log_format>syslog</log_format>\n    <location>/var/log/dpkg.log</location>\n
+    \ </localfile>\n</ossec_config>"
+kind: ConfigMap
+metadata:
+  name: wazuh-conf-5bc7t8k9h7
+  namespace: wazuh
+---
+apiVersion: v1
+data:
+  password: U2VjcmV0UGFzc3dvcmQ=
+  username: YWRtaW4=
+kind: Secret
+metadata:
+  name: elastic-cred
+  namespace: wazuh
+---
+apiVersion: v1
+data:
+  cert.pem: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURhekNDQWxPZ0F3SUJBZ0lVTnNXcG
+    tITU1DMWNsdUpyeC9JNE9sYy9uZU9vd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1JURUxNQWtH
+    QTFVRUJoTUNRVlV4RXpBUkJnTlZCQWdNQ2xOdmJXVXRVM1JoZEdVeElUQWZCZ05WQkFvTQ
+    pHRWx1ZEdWeWJtVjBJRmRwWkdkcGRITWdVSFI1SUV4MFpEQWVGdzB5TVRFeE1UTXhNREV4
+    TXpsYUZ3MHlNakV4Ck1UTXhNREV4TXpsYU1FVXhDekFKQmdOVkJBWVRBa0ZWTVJNd0VRWU
+    RWUVFJREFwVGIyMWxMVk4wWVhSbE1TRXcKSHdZRFZRUUtEQmhKYm5SbGNtNWxkQ0JYYVdS
+    bmFYUnpJRkIwZVNCTWRHUXdnZ0VpTUEwR0NTcUdTSWIzRFFFQgpBUVVBQTRJQkR3QXdnZ0
+    VLQW9JQkFRREJBSGhpU1dnS01qVTNGRFJUMXN3YnFPbFB3ZjRndklGYUpnT2hOWEFNCmh4
+    V1hKWEVDa3pqRS9idWRNY3dOTW9aalV1N2xXTXVWMklMMTRqMGkvSWdNdWlXcjIrcGpzY2
+    pIMC9jSnFpNTMKOXFjSHNpall3eGQwS1l0aXlYbmNqVDNuS0NFeVRuQVZDYStWOHUxZHNQ
+    WkVQS3Y3YkkrUDduOWlsRnkyUmtOcwo3cENoa2NsV3pOUjd6NUNHVFRCWmtOODJFV1hqSU
+    pHdE8xdCsraVAxWUV0VW9ETXVlckx2ME1PeUdRZWdGbFVmCng4eXc0T1hlYkpzcWJKK2Np
+    MlQyeGc3REtjNGVLeTFMRWNVMzVZeVlRanlqVkhwVlZRMXE5MEdWdmFGNTZvSjIKcndDL2
+    tGT0FKYlpuQmQvOVlFajdLZVk1QmFyQ1g2d0cydmdnaUNqcnFzMEhBZ01CQUFHalV6QlJN
+    QjBHQTFVZApEZ1FXQkJUSkZ5WEZxTHF6L2V0ZTQ1TVNyRmJHdUFoY1dUQWZCZ05WSFNNRU
+    dEQVdnQlRKRnlYRnFMcXovZXRlCjQ1TVNyRmJHdUFoY1dUQVBCZ05WSFJNQkFmOEVCVEFE
+    QVFIL01BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQUEKMUJRMjhIRXo2Y1NhWi9sZmY2L1
+    FWbXNseS9oeUdWa1JyaTBRZmlwL1RwU1N1dDcxbm4xWmZTOWVvaEtYbkNjZQpCaGlKYWtk
+    a09xQk5Zd3pKR1NLOGFDZzRWckZjSVVETnNhbFRPa2ZNNncrL01vOXVjaGJVbWRkWWhQSV
+    E2Z21PClkxRDRXTzFxcGhuVEJTMXRtVTNzalNGS0t3WnZJdUdPT0tYZ21SWW1HV0NDT21J
+    V0hvMitDeVVrZGpxandKb1YKVVBDU3hWb2d4cTlRKzR2NUtab2FWSGlHb3BraGxRSGxmbX
+    NjWXgvR0xsYlV6d25WVmlQVVFJempENnIxbEUrSQpHNDdUa2FSdnFtMzlHQUp0WEwrdmFy
+    QWpKbCtlZFcwRk5hTVdnQVFhRTBDUS9uZXdMd0I5OGFVZmdrMk5TZnJTClNIcGlzMHE5ZF
+    FMTDBYbFgvdXAvCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+  key.pem: |
+    LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UUlCQURBTkJna3Foa2lHOXcwQk
+    FRRUZBQVNDQktjd2dnU2pBZ0VBQW9JQkFRREJBSGhpU1dnS01qVTMKRkRSVDFzd2JxT2xQ
+    d2Y0Z3ZJRmFKZ09oTlhBTWh4V1hKWEVDa3pqRS9idWRNY3dOTW9aalV1N2xXTXVWMklMMQ
+    o0ajBpL0lnTXVpV3IyK3Bqc2NqSDAvY0pxaTUzOXFjSHNpall3eGQwS1l0aXlYbmNqVDNu
+    S0NFeVRuQVZDYStWCjh1MWRzUFpFUEt2N2JJK1A3bjlpbEZ5MlJrTnM3cENoa2NsV3pOUj
+    d6NUNHVFRCWmtOODJFV1hqSUpHdE8xdCsKK2lQMVlFdFVvRE11ZXJMdjBNT3lHUWVnRmxV
+    Zng4eXc0T1hlYkpzcWJKK2NpMlQyeGc3REtjNGVLeTFMRWNVMwo1WXlZUWp5alZIcFZWUT
+    FxOTBHVnZhRjU2b0oycndDL2tGT0FKYlpuQmQvOVlFajdLZVk1QmFyQ1g2d0cydmdnCmlD
+    anJxczBIQWdNQkFBRUNnZ0VBSGZKdHU0cDZXMEtwSVMvQVl0WHNlOG84MFlSZlkwTDhxem
+    xFek9uV3hncmIKM2NVUWdQN0pDei8zc1k5OWd2cTVBWVpuelN4M0FueEM3ZFk1K0VqSTcz
+    aWV5Y2pvMktsSVowRkxqck5hWElEbwpML2lFQUFaZGlFZTkrZ2tiSUk3RjhTMDM0VzlzVX
+    NkYStHQm1WbWhUL2dpUUF3WTRUSFFNVGdhSlVEc2MwVFQ1CnVRR0VRYlBJZHhCV05PaXBG
+    OEs1Yi9MZHJmRStyZ0tYYkttSnV0V3RKVExMdFVzZVNZZGdidVVwSEJRdzhka0cKOWx1VG
+    4zd0NPajdsR1R3cHdhVExwMWtHM3J5N2xvM09oNnpVZ1pGTkI4akdBVkxJd2RUK0E4RzBz
+    ak82MVJDZQpnRzU2OHAzRFFHSHJuMi9MOFVoOUp1bFJmRjJPbWdGM0FoejdFUnpGMlFLQm
+    dRRDdaK2Z4dEZSLzcvWnl1TklTCjhMN0R1SGZuTTdGQU90UmlVbmpBNWlSbmxKYWJDVEZE
+    Ky9XTEVtSm5ONGNqU0ZxbC9EVEphSFY3VnY4T1B0bE4KcitTL1phV1hDZjZVQUtoM2E4ZD
+    FzMU1DU0YzN0JwWEZHZWhIZ2FHTHJrV2J5THBzTUtQbmlVbnBqQmoySU1PRQpob1ZHTEVz
+    UkZlQm1UOFlML0U3MVQ0Q0tEUUtCZ1FERWgxaVk4Y3RHdEVJYzF3QVB4NGd3bnN3VWRCbX
+    ZFSXE4ClJTMXJnajhKZHZ0L3VWNHdFMDdNYXJTOUJwOXVndDJpeUFzTGZkcXZNRVRHd2dq
+    ckROQlBTVUpOZlhiVWtjdmkKcEc3eURjd3g4ZU9sbUgwZktuamoyeEk3QVh0V1NKRHMyQn
+    M4b2pxaTFjK0k0V0tONW44bmplTS9SNndJazhLWgo3cG9ZQ3FLU1l3S0JnUURUWUZPVjEy
+    Yk1ncmVWVVd2ZlhPY25yQ3UwQ3JSWEtwOXpZNS8vb0FDdnpqQ3FmWm9jCmJQWFFUazdLTm
+    RlN2hKUWl4dUNqRHQ3b0t3Y2J0U0FEdjRYMm5zSVJNZWdJREYyWXV0ZmpVRGpVekgrb0Zh
+    dEwKSXpNM0cvajFkanMwZGhxMzZGV0cwTm1DTWJhekNtMFpPZmxJUE9tSW5mb2tTNkphWl
+    hNRnNpaUM2UUtCZ0VONwoxa2h1ZnNiQWp4TW9JTFZLWnRHTE5iaXdSVUdBQktPeGZXODFR
+    a0FWd3phUWlHOHBzaDB2WnZDaG5ZMXRFbjRiCkF1L25QM2g0c3FVdGE3S0txOTBONHQ2SS
+    9venZvM3NueTVFQ2UrT0tsQWtBMjdZZjkzTUdmclFVUmkzU3JURW0KNC9ObUlZeFlydkxw
+    c2RYWUdFR1V6enVqZU1kWk5iRjE1U1BzUXZiUkFvR0FFbVZqb1BCV3R3dng2NDVsQnhQWQ
+    pSVmk3ampDTzd2eUM3Y0IwSEI0QUxFeTAza2ljVjVwZGk3c0VRL1BrMkJYMlZIWHozbU9C
+    eDRZOTczYkRFaUhnCjlJTUVGcjRBWHlncStPWW5Sa09KbVJxZEViTUdoUXM2QmNJL2hRZX
+    RRVUVBdGtaUHJFTFBTZXZXanZyWWlXMjcKRFNNaXhRdEhKR1A2MkZ4ck5USkFzVWs9Ci0t
+    LS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+kind: Secret
+metadata:
+  name: kibana-certs-94k5g5kdc2
+  namespace: wazuh
+type: Opaque
+---
+apiVersion: v1
+data:
+  admin-key.pem: |
+    LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2QUlCQURBTkJna3Foa2lHOXcwQk
+    FRRUZBQVNDQktZd2dnU2lBZ0VBQW9JQkFRRFNzSlZYSk52TXVvSHgKWVY5NmxXSXk1UDQ0
+    S1gyenM0VXZKRHk2b3djWmVEMEZzUUVUZ0U1cEEyY3NvcWVNK1B5cjdncFNLRUFIa1BSMw
+    pXTTZrOXU0V0lRSTBHOHk2QW1KWktnZlYvcnN4OTVOMFFXRi9OSTY3TGcwMWFOSnc2cGhR
+    T3hCNE0xYXk3Vm9KClVuZ0doNnNvTjNTdG9zUXJmdk8rT21zcWMwTWptYjcrNTFMWms0WH
+    UvWTVYV3lBejJyQXQxcjJ4eFNKb2tiVlIKMXFvd1JMV0ZWSHAvQVExaGRzNWEvcmwzR2I1
+    d0hMUlhBQzFIUm1qTDlGeXpMV3kwSStvdTJRM0lxL2daU2xWaQpQc01BQ3Rlek9GQ0xnST
+    h1dXdtTE15QlE1Ny9reWlzZERhQytvZFBQOEFCckVVUzN2bDdCeGFXQ000REIrSFJmClY4
+    aEMydzZqQWdNQkFBRUNnZ0VBVDZRS1A0K2lPa2hCK0VGTGV5WGVvY2hueEVrQ3lCdlMrMW
+    ZpVU5aeFI1Sm8KMXE3cTdqa3c2b2NyeC9hUUNUelJIaGh6OUV4Y3I3OStlV0tyY2pZWkYy
+    cFF6K3UyUHBYS0lWUSs5QWcvTUlzYQpSUGExNlFTdjgxZGNETlZidnUwZXVDMHJjNVJNY0
+    lSQjVZWXo4cHZ6K2RiRWx5SVFyelJrNUlKbW9meEI0OEY1ClNvWDJvNU1uMVZ3THhXSkJG
+    NXNsQlYyUndCOEE5UW8xRWF1bXk2WVFVZWxoakY0czR1ZGozeUhCYzFjZS93L1UKdWlVR1
+    Fpby9qUE96ZU1NNzc3Z1VEY3BUVFR6NStlQysrSlBoSVhOZjBuRDNuR3huOFNvWUdBOVZQ
+    WEdUTTVCbApxMjBzWllRWWg3ZkVSOVpGMzhZQk9pN1BvOEJERWNRYWk5ckMyZ05uaVFLQm
+    dRRDJlcGJjSVlJNlVyK01tZG1LCnFETVZqSVR1WlhNVDJsbVlKZGZGNE9xQ093RHR5SUFR
+    ZXFqS3kyK0VrU3BLU1d1QXYwV1VGWEJuQnBWNTYrVFQKenZ3QlFuQjR1cld6d3RQd1hqaF
+    Znei9BalFvMUNBMGI0ZXpPWE9GVnN6Z3FreldaOGV0eW1ycXdycFdneWhKZQpRZmVUK0RB
+    V0lTTmJ3NlZ4S1ZST0FRVVR6d0tCZ1FEYTFCUWFKMEJaOVd5bkFUazR4UlBObDJIMTJMVk
+    t0VlMvCmRLS1RMUXVrbEpQNThiQkYyNHhnTUJiSHpZMU1ySXhQMnlEemF0cFJyakJ6bWpD
+    Vm8vV29wZjFvdkx3MWtudjMKVVpwTUtFOGMxYXZoUno3elpHMm9xcEd1dE9NaDBPVzB0Vm
+    I4NmIvVHJPWGovOEJQcXhjTGJ4Y29rb2c1dVF0aQpzaTZGWVBMSTdRS0JnRDVXVE5kSnhr
+    VDM3cWdodFFwRGRnQUtOUWlTTWVPZ2dxNWZTODRwRDBaMm84cC92aHZzCjJjbklYK0Q0VW
+    VqTjN0bUdCcFBvUkRCYVV1MnVBb2FyUDhNVnlacFBKbXRiWi96UDU1R0JDMXVva0I5UGRQ
+    bEwKVDNmMXQ2dlVFdTE1bzhIV2xJUzhxMkRLRnQrK201eXBOSE9BL3JCcUd5WTNPaDEvcF
+    duQkNrYXpBb0dBYS9vTgoyVUhZL1FxZkRHRU1MVGtCcG9hMkxhczYrWncwTHl5TU0vY2NN
+    Wittek1RM2FLRUd5VWV4VmZIVmNTb0xLalJFCk5CaGJsY1pQM2hzTk1pbHZSRUp6b2tUTz
+    BkaHdGdjlMRlowbVBHSXFwOFNTQ1dOYXdNazVqVzF3VGZWWUF5MGYKdVRoV0VVclZQUVdy
+    alNRdEFOVldKZ3ozN3hPaHpKZURZUWtQZzVrQ2dZQlh2M2xmVkRCaEZSQ01UWHpjNGw2Tw
+    paMkdOellESVBoeEpMby91SjBHTGQ4SXZmQ0w3WDlIMUlBYWI3b1F1aGhWRDYrSXJOK09X
+    VVAyYndkMWpKNG9ICk5FTjkyVVIyakg4ZXVwTVBUNVZ3K0tqb3JFMnNxdlF1WVhrT1NOY0
+    x6YzlCVmt0OUZmTGVTRExXaFA4bDM0TU8KdHJ5MkJxUWE5UEgyZVBnelU5YnNQZz09Ci0t
+    LS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+  admin.pem: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURFVENDQWZrQ0ZDNWltUWlkUHpwY0
+    RnMGZ5SHR1Sm44UTNrVVJNQTBHQ1NxR1NJYjNEUUVCQ3dVQU1FWXgKQ3pBSkJnTlZCQVlU
+    QWxWVE1STXdFUVlEVlFRSERBcERZV3hwWm05eWJtbGhNUkF3RGdZRFZRUUtEQWREYjIxdw
+    pZVzU1TVJBd0RnWURWUVFEREFkeWIyOTBMV05oTUI0WERUSXhNVEV4TXpFd01UQXpPRm9Y
+    RFRNeE1URXhNVEV3Ck1UQXpPRm93UkRFTE1Ba0dBMVVFQmhNQ1ZWTXhFekFSQmdOVkJBY0
+    1Da05oYkdsbWIzSnVhV0V4RURBT0JnTlYKQkFvTUIwTnZiWEJoYm5reERqQU1CZ05WQkFN
+    TUJXRmtiV2x1TUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQwpBUThBTUlJQkNnS0NBUU
+    VBMHJDVlZ5VGJ6THFCOFdGZmVwVmlNdVQrT0NsOXM3T0ZMeVE4dXFNSEdYZzlCYkVCCkU0
+    Qk9hUU5uTEtLbmpQajhxKzRLVWloQUI1RDBkMWpPcFBidUZpRUNOQnZNdWdKaVdTb0gxZj
+    Y3TWZlVGRFRmgKZnpTT3V5NE5OV2pTY09xWVVEc1FlRE5Xc3UxYUNWSjRCb2VyS0RkMHJh
+    TEVLMzd6dmpwcktuTkRJNW0rL3VkUwoyWk9GN3YyT1Yxc2dNOXF3TGRhOXNjVWlhSkcxVW
+    RhcU1FUzFoVlI2ZndFTllYYk9XdjY1ZHhtK2NCeTBWd0F0ClIwWm95L1Jjc3kxc3RDUHFM
+    dGtOeUt2NEdVcFZZajdEQUFyWHN6aFFpNENQTHJzSml6TWdVT2UvNU1vckhRMmcKdnFIVH
+    ovQUFheEZFdDc1ZXdjV2xnak9Bd2ZoMFgxZklRdHNPb3dJREFRQUJNQTBHQ1NxR1NJYjNE
+    UUVCQ3dVQQpBNElCQVFBbm05emtIOXZCR1NDbGVrVXNjVWxUTnVzcjFxYWxyTE82eWxZbX
+    A2dzArZy8wODltMHRDNmZoUms1Ck51akVwN044OXNkYnlIODltSk5CRTErYTM2ZjFPdnFa
+    OUx1K2laejl3aDJGNFBWamRiL3ZmK2x2cTduSUtwbGwKSTJWczFacGI4bWpwV1pib3UwUl
+    BQcUw2NTVZU1phem1ndWx6amE4b3kweXRhVVhmNUQ2SGFET1BqbnV1Z1EwZApFd1czdk5s
+    R2ZETTRkZ3VJWnNCRlFMenhzYjZrWUhiZ2JrdEdhYVZmbzl5VE1LMitSYS9sTlJJYm5heV
+    czcjdXClRGdXh6djJRK2UyWnVLOTdreE1iaU1rcUlodkVubVRqWlEyM1pCcE9JU1l1WkJM
+    STNFYlRMSkNNVXlVblY1cFgKbnFxZFBIOTZ4dTJaU1JmWFVKWThvSXdocjc2bAotLS0tLU
+    VORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  filebeat-key.pem: |
+    LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UUlCQURBTkJna3Foa2lHOXcwQk
+    FRRUZBQVNDQktjd2dnU2pBZ0VBQW9JQkFRRHZCSFJ4eUpNeXd3cEgKUy95WWJoSTBITUgx
+    M1MxejFIbmJhSmxwREpLWEc3a2ZUenI2SDdTN3hRbXA1UEFDUzRaMk1IbytlT0IxZlJKbg
+    pFb1ZYYm5tZU9HREc1ZjNzQ1VJZE1DUmZQd25sOGRuN0NrNXcvM1dOelZnemE0Si9jS2VR
+    UFI3Z2xWNnQ3N2xGCnJISG1CMlA2ZnVvM3RtOVVyUDZlb0RCbDAxSTA0WS9VMDdSTzNSdF
+    RYSzFFeGhsYzYwMzMxTXJVZFdVcnJ4L1cKbEthRTRVeEJaME8zV3M2VEgxaFV2S3A4aEtl
+    bEYyczkwRmk2OW4vU1d4bmxWdWwwYk8zalE2RmhBRGFRZkRhNQpTTzFPTWVCRlpzendsdm
+    QwR1JZT1BnRmk4OHdGVWs2V3pQRHJYRVIydngwajcrMnc5R3RrMUNBUHVoc3lZNzdRClc4
+    YTRTTklwQWdNQkFBRUNnZ0VBR2FSNXRhZFdHM0VQVGp6WnVhUzljVGZRbTBjQ1ZGWHNTTn
+    k4OEtjM3B0eUQKak5kY05XOW5YV216TXJYc0JlTUNadldtZDhOU0dXaTBxN2d4OUFKWEsr
+    RlNpS1F1REwrbGh5b2VETlhmZ3ZyaQpidXRaSlFoVEhVWjFldmJDeGxkWXNzSEw2VDQ5TF
+    IzMTI0SzNxWDBMZmRsVjJXcEtJV1I1NEp6QTlIdXFheCsrCjBPTXl0RnhzekNkMFBPeCtD
+    MU9YVGh1T1I5VG5ySlVwOFE4Sm5kYjdJWWNvWkthcHB6c2hIZEdqUWNrQ1Y3S2sKRFBadn
+    F0NU12UG9LL3V1WjBCODI5VUsyL1pCME5PQ2toVE9PREduekJkVGl4UXBOeExpN3hIeUVp
+    aWVFZGpBRAp5ZVFpWVVXRFBSMXNna0xVQmFPY2JsMEFsb0p3MVNqUXA3ZjNKUFpVM1FLQm
+    dRRDZpQUdGajNuT2t2QjMvOEM5Ci9ucUFiOGhCV3h4K3ZUUmFmQjB6c2VRMkFiblFNT1pr
+    dEtidUNyTW9hQUxKWWt1RkUxVWlxUnRBMFpxV0Y5RmEKbThIU1N2dnFJU2RwMDJEaEdNRH
+    lyTFpGWWRFYkJlTVJkL3VHMEFjMzk3cU5CYlhrQlNzSERWSXl5OW40Ym82YgpiQ1ZmRGVL
+    TzRVTTZFYVZ0aWhxeUQybFVxd0tCZ1FEMFBCdTFxZFFPYnNncWVuc2J6YWFPeFhFTko5Rn
+    ZraXJlCkxWR1lBT0ZPbDlvOUdWVFZ1RWkwaUExNVhOZzZmNk4wM3pRbTZYcU9FMmJwRDVX
+    ZjVYdllMcXFHSHpVSS9FaXYKNU1MWVhyVG1GWUdsd2l6dXk0LzZtOUJ2MDBnbTNvaUFNeS
+    93bHFTVFE5U0VnK0x1YWtCMm56TzU1K2FBSlU2NgpIY2VvWU45c2V3S0JnUUNsc1czUU42
+    UUh5NGJlMW5kVE1RczBCcm9hLzNkSkd6bVUzcUV4bjJXZmttU2lITFZECnhYYmgySkhGRj
+    RWQVM1Skc0UkpkYWhwc05EUlpNRWQxOWEycXQ0MEV2QWlsSlBmZDU5RTBycVdlSGFOK2k5
+    WXgKcDNqaklKS2xvV0h3QXViWmQ5R05TSElreGszUzBNdmdYeFlZVjhhUFdNeHRpMTR0cE
+    RranFxMnZJUUtCZ0FkWApielhNdnhVWCsyaGJlaXZoeUtudUFYSDF5blBpSHV2Q3pQc1d1
+    NjhUSFhwTXNxSWlBZjE3UVh4dWNBbUNJTFc0CnArYXJpZ1dQUzc2aHUwdXRLRVhkVVQ3cT
+    NUdEI2aVZ2YVBQOEZNLzl3WUhzRGxHM1NNS3R3Rnc4SzZVUGQyYnoKSXZQR2MzZ0J4L2Vi
+    eDB5SFlSeXZ1R3hVTGplWDUzL3N1VDIwZThMVkFvR0FZL3RINWxkaytVbnFUR2E3OG5uTQ
+    p1SFV0M3IrRmVKeG1qOGg0ZDl3Si9JTitlcGRTUEU5anJjSzdHanBESlZIeGFXa3l2bzgw
+    V3JRUEQySGJCVC9oCkZwbTVqYWpvaStxYXJJdExHVjIzekJhMXNueFFPdTBnNUF6R1Nwa0
+    8vZ0VvV1JRMUp1SjRBL0FiUFRTSXV2VWsKVVN4aW1lczJ0R1h6NGcxZ0RPbFJYUXc9Ci0t
+    LS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+  filebeat.pem: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURGRENDQWZ3Q0ZDNWltUWlkUHpwY0
+    RnMGZ5SHR1Sm44UTNrVVVNQTBHQ1NxR1NJYjNEUUVCQ3dVQU1FWXgKQ3pBSkJnTlZCQVlU
+    QWxWVE1STXdFUVlEVlFRSERBcERZV3hwWm05eWJtbGhNUkF3RGdZRFZRUUtEQWREYjIxdw
+    pZVzU1TVJBd0RnWURWUVFEREFkeWIyOTBMV05oTUI0WERUSXhNVEV4TXpFd01UQXpPVm9Y
+    RFRNeE1URXhNVEV3Ck1UQXpPVm93UnpFTE1Ba0dBMVVFQmhNQ1ZWTXhFekFSQmdOVkJBY0
+    1Da05oYkdsbWIzSnVhV0V4RURBT0JnTlYKQkFvTUIwTnZiWEJoYm5reEVUQVBCZ05WQkFN
+    TUNHWnBiR1ZpWldGME1JSUJJakFOQmdrcWhraUc5dzBCQVFFRgpBQU9DQVE4QU1JSUJDZ0
+    tDQVFFQTd3UjBjY2lUTXNNS1IwdjhtRzRTTkJ6QjlkMHRjOVI1MjJpWmFReVNseHU1Ckgw
+    ODYraCswdThVSnFlVHdBa3VHZGpCNlBuamdkWDBTWnhLRlYyNTVuamhneHVYOTdBbENIVE
+    FrWHo4SjVmSFoKK3dwT2NQOTFqYzFZTTJ1Q2YzQ25rRDBlNEpWZXJlKzVSYXh4NWdkaitu
+    N3FON1p2Vkt6K25xQXdaZE5TTk9HUAoxTk8wVHQwYlUxeXRSTVlaWE90Tjk5VEsxSFZsSz
+    Y4ZjFwU21oT0ZNUVdkRHQxck9reDlZVkx5cWZJU25wUmRyClBkQll1dlovMGxzWjVWYnBk
+    R3p0NDBPaFlRQTJrSHcydVVqdFRqSGdSV2JNOEpiM2RCa1dEajRCWXZQTUJWSk8KbHN6dz
+    YxeEVkcjhkSSsvdHNQUnJaTlFnRDdvYk1tTyswRnZHdUVqU0tRSURBUUFCTUEwR0NTcUdT
+    SWIzRFFFQgpDd1VBQTRJQkFRQ2dROFFtWnE2Z0NkU040dzJUMzk5T2VRWUl4eGtiYnM1aW
+    RCRzlZRHJuc3R6U1h3TmxnR2M2CkR2NkZkMkl5ejlTMWlqMmRxRGVvaldrck93ZHhHaDBx
+    YTZkM2o3SnRRVENWVXI1M0FmUC8vcm9QVzVwQnN0RXMKZXY0b2taMzNnM2M5dHhGUWFyRU
+    l3M09ISGVCb2VITFV5M3lUUDV6ZDN3L24xb2grR0FjYkFlT1V6bGFUQ2JhbAo0THl2dkM3
+    TnJoV1E1UHB6L1JlS245QmpmbVMybnZUckpJeEZqZUt0OHN5REoyT0ZETDlqQVhrRE44c3
+    BOdFI1CkNOSVpHazFGTklrbjNFR3pUR2dJb0hja3EvRHRKWXMvbXpucS8vYTZ5SDkzdkZs
+    ZGdpZXFMZWxBMlUvNmJtWlMKdHlpcHczWGZIeVFDZ2l1RjRPTTVaNk1oQTZwTHJHb0YKLS
+    0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  kibana-key.pem: |
+    LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UUlCQURBTkJna3Foa2lHOXcwQk
+    FRRUZBQVNDQktjd2dnU2pBZ0VBQW9JQkFRQ3dqdUlQZ1RmMkFmUWkKajFoc3IvbnpvcHdj
+    TGptTHFJeXhTYzdvOGozY1I3QmR2ZFp2U3dmQmlQTmNsTDJFRXFDYXJSM2gxd1dYcGRkNw
+    pMdUI2cEZoTkhhaUxjUFRHKzRveFArSmY5ZnVkcVNRT1lGYlJnTFkxOW9GMHVGTDFIS0xm
+    eEFGYlJxVlJGUm00CnJVYmhLN3pGRzVIRUZtcWVvd1c3cDJWNXZQWGIrY1B2TlhOZFUzQW
+    NUMkdRQzlia3hFSWJwbTF5WkIyc0dQNHgKVnBoRDJvb29FSC83bFVYMEp2R0tFdVc3VTM3
+    bFB5SE1MeldIYzd3MzZIRDBwZ0VrSE82aFRpVm85Yld5Uno4UQpLa2pqK0crOGpQQm1oNk
+    h3Ti9TQUJuajR1ZEdxZy92TlB6M0tlcFN1WmVZOG9TT0IzalMwQ2VlMHowSUZnMnQ2ClJ5
+    NFFHbGlsQWdNQkFBRUNnZ0VBRjQzSVBMZEpadWxWejNKK0ltbkxsNlFlM1dlUlI3OWhuWm
+    t5SUVPSTJ5VTUKTXhoTFRpZWRUa1ZkNmdEeDAzZkVzejNiR2JEY3p5RlJ3TjQ5Rmo5c2hF
+    VXJvZ2Fjc1JzSGtaQnJPOUFPRkRkbgpWditsTldmTlp4K09uNnFqYm8yMmNOR3VPS1lSRW
+    VNVnZseG5jMHlwYjBaQlNQNlFsTDg4Mlk3NGE2ZzR5SEt0CjVDN0xtMDM0QlR0cCtpemZx
+    VTYxd24wVVFXcHZySTVrZGtwMDJZUGNhdHQyck10QTNYZmNkUm0wdFYxR01BRkgKNXo1L2
+    5ndkhpMzFjTjZnWEFleTdnZlZiVWNSdXJOamNKNlVQQ1lnNnZISytGVUdIcmRUNng1VlRI
+    aTFqaDBnQwpsbEVzTHBiWFkzOEVYSEV6Nkx0Q3pPRXJTTXFVSG9KWFUzK1JpWjVlb1FLQm
+    dRRFlUTHRTakRDb2k2cnpjZTVlClVMaGIzQUhMeW9adk5mV3Zuek5tSHJsa0xhMHQ2eXM3
+    UlV2ZzNzRis2SldXSnBjb05nbkdKWVB4bkl5UUxvN3EKV29DV0VQMEhmWTEzVHhMZllpSk
+    JraktFWk9VYWp5VWhWS2kvMk5HVWNNbmxpemFTN1VRM294ejdKQnZHYkl1YgpDZnJHSk1G
+    czcvbThad1RxU2RpK0g1a0hLUUtCZ1FEUTl0QjBGb09TVTduYmZobm5UK1pVbWV0Mytaal
+    hHbVpqClhvd3BvQTdLbWdkenE3RHdvYWgvNzczcnlNSDJoeGppTFF2b0Q2V01RcnE1OG4v
+    ejJ2dFJ4NXBBYUk5REFYTk0KTVlZdHQ5M2M2cUZLU2tzRmNXZkdzQ25WV1ZaRVBMYXRXa0
+    5rRjhJbVhxM01xLzV6SCt5eXdBSERIMUNtUEMrUgpyY2pheDE1aEhRS0JnQmhvR0I4SmFK
+    Z3NJbDhUOVFTNWNRUVVnRE5ocCtlMm5BRjBJbFdjaytqRTZxeXF3NWNOCmk3RlZFVnBqbm
+    pWeUowNUhRclVVR0o1VHZ0eXFGRUJIZEFqNjQ4SkxuWUhmNzA0N2dZZ0ttaDZzVDltK1d6
+    ODIKa1ZBTWhDR08xSWxOT3h3N0g1NXpqbHFjU1hJTFgzbGdGK2J4ME0yZENuNEMxZUFsOH
+    dvSkFMaDVBb0dBV3hrdQp1VjFUVU1pVmZ4NFRkdWM3VitpZVlmaDdiRk5ERGRFYk04NW1o
+    R2J3RnJwajhoUFgzS2FNMnF6eittRGROVVZFCktwQWZzTzBxY0lSS3llbk9wTkZxNnVkcW
+    hXQ3RmaXNjL3ZOb2tyWHJTUExvajkvbnlSUGx1UEF3anFFVlZxL0MKTDNHNEgzZ3BOdEJJ
+    cHJIbFErdzNHSFNmZVVsRng3SEduYkpLNy9VQ2dZRUFoUzFyTjBXSDB4NWdjVzRpL1p1TQ
+    p6dHp0SEUvMy9XMHQyNG9zb2NKcTc0bDBWRjkwY0ZlWUY3TUNVQ2xCTnlHMnlFQ2VPbEJZ
+    aGUzZmtJbnZXTDNNCmVJeUcvWW9EVHJYZXVxTmp6V1ZwalhxWmIycTE5djRKVVgwdFljTX
+    Nla3hxM0FLTGwxN1NiR3plTUdhNXRjQ1UKcGNxMDdXSlg3ajVkWk12TlBnbTcwM1U9Ci0t
+    LS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+  kibana.pem: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURFakNDQWZvQ0ZDNWltUWlkUHpwY0
+    RnMGZ5SHR1Sm44UTNrVVRNQTBHQ1NxR1NJYjNEUUVCQ3dVQU1FWXgKQ3pBSkJnTlZCQVlU
+    QWxWVE1STXdFUVlEVlFRSERBcERZV3hwWm05eWJtbGhNUkF3RGdZRFZRUUtEQWREYjIxdw
+    pZVzU1TVJBd0RnWURWUVFEREFkeWIyOTBMV05oTUI0WERUSXhNVEV4TXpFd01UQXpPVm9Y
+    RFRNeE1URXhNVEV3Ck1UQXpPVm93UlRFTE1Ba0dBMVVFQmhNQ1ZWTXhFekFSQmdOVkJBY0
+    1Da05oYkdsbWIzSnVhV0V4RURBT0JnTlYKQkFvTUIwTnZiWEJoYm5reER6QU5CZ05WQkFN
+    TUJtdHBZbUZ1WVRDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRApnZ0VQQURDQ0FRb0NnZ0
+    VCQUxDTzRnK0JOL1lCOUNLUFdHeXYrZk9pbkJ3dU9ZdW9qTEZKenVqeVBkeEhzRjI5CjFt
+    OUxCOEdJODF5VXZZUVNvSnF0SGVIWEJaZWwxM3N1NEhxa1dFMGRxSXR3OU1iN2lqRS80bC
+    8xKzUycEpBNWcKVnRHQXRqWDJnWFM0VXZVY290L0VBVnRHcFZFVkdiaXRSdUVydk1VYmtj
+    UVdhcDZqQmJ1blpYbTg5ZHY1dys4MQpjMTFUY0J4UFlaQUwxdVRFUWh1bWJYSmtIYXdZL2
+    pGV21FUGFpaWdRZi91VlJmUW04WW9TNWJ0VGZ1VS9JY3d2Ck5ZZHp2RGZvY1BTbUFTUWM3
+    cUZPSldqMXRiSkhQeEFxU09QNGI3eU04R2FIb2ZBMzlJQUdlUGk1MGFxRCs4MC8KUGNwNm
+    xLNWw1anloSTRIZU5MUUo1N1RQUWdXRGEzcEhMaEFhV0tVQ0F3RUFBVEFOQmdrcWhraUc5
+    dzBCQVFzRgpBQU9DQVFFQWFVUHB6UnU1eGtNR3dJRjlPU24yem56Y0MreThkT21CcXh4Yl
+    liYzQzelRyZ3VIMWZrV0lBOGN5CkNtem5aYmhTQWxCZ0F6RXFzQkRibjlXTGlJdkVGQkZj
+    eTBremRNTndsbEErRmZmaWJreEo5aHB5Kys1SndBUWYKUjhMNUlsZStIbkhlc0pKNzgreU
+    1LdHYxWDVrcllGbThqWFBGS2RLNXVQanY1WHBYSGQ2eENZY2FsT2d0Rm4rOAo2UVRkWEd4
+    bnoxaVF2bmFVeFUvOGZFbDA2dDY0WDJQL3dGNE9qWUhOeXZqajhlTVpsUGVMTXIzdTV6Ym
+    VyMGZvCmFIUEw0c0h6NTBwRzZXU21DZkN1SDBMKzZ5N3NsSmFQRGIzdXhzemJEYVJ4SU1w
+    Qld2MHFyZktMb1VNVkswdmUKdWpTbno0dVZzbTlhemwya0dGRVhVV2lFS2ZnbGJnPT0KLS
+    0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  node-key.pem: |
+    LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQk
+    FRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRRGFnaTlwSWl0OVFrZTMKdk5iMWUwQlYzV1ll
+    R0pJUU1BZGtqNjF0bzNpTHBNU1VJSk9uN1VZbVFDQzRUT2VQazFCbVdBNGVIN210WUduMQ
+    poK0tqTnhGNm53NUZUaW9sT0cvWHIxeFN6TWJyRUNIMzNJWXFrdVY2T2RlQ1BuZFdlY3Ra
+    STBqaGhiRVdHdmk0ClpIQWhxVWZFMmFVd3B0VDlBQW52bmFOOXhTYzZsbUVBSHRhNExqeD
+    NoMkdvZVpGN254NEpYdXNycnZDL1FoT0oKdTgxa2hoWWoxNlZlTm5EbThmWVB6aHl4S2tV
+    ZktOV2NyT29zMUd0MFBIdlRKYlpiVDhNZ1p1aEhselRUQkIxRwpKeUFnancxYk9GZGRPL1
+    dHYTk1Sy9pWHN0N2wxK1JGbGZGZi9WVkp1bzJEcWE3V2puUXhaZWNENHF6ejRoNDhoCi9x
+    Y2xPdHh0QWdNQkFBRUNnZ0VBTUo1QzJrdW1EWXJQMWt3SU1EcXFSL0NwSmcwbGdzQ05CST
+    BMYzVlcDNMaGUKbk83YXE4U1psUzB6bW81Ui81b3hpM1FRUUJlakFyYXZITmlOVHUrVHpn
+    clI3QTNHUnQzVjFOSEo0d3A1UUJnbwoxck9VanFoOHNzTm45aXpiOUx2SXlSNld1c2M2Ym
+    NhMmpLQ2Nhb0QxM1JEb05ua0lidnF4TzBXQitSd0M3SC9iCjdtNTJ4WkNlVnhVTGVjZmor
+    L2NpN2JjdUxFbjFVOUUwZ1pNTUNSc0xFOSs0ZnlZQ3FCWjhHZEpnM1Jub2xwL1MKeWxSUE
+    oxSU5zWm5zV0pLdnJBb1dXbzk5bWxNcnVZZDQxVlEzV3pSTncwYzhiM0ZHL0haVnYzSWxR
+    dDVaY092SQppemtESjlkOVZWT1o0U01pMW1DbU9DUVhNdjlNZVNkaC9BWVBNSHhsS1FLQm
+    dRRHpYY0dWV0VYU0pJMXFudWVyClJ5TnJldlMyZjdpVEpDTSt4S2IxU1BhbHl1VHFoQUdH
+    Y3BjZDVpYTA0Z2YyMHhveE1MN1VYYmpoOEttWE0rUlgKcWxJc0I0d0poc3VGQzJhNHQzRz
+    lqcXhKZXJHRnhRT3JhRTBrK29DZW81TEVRa0JPWUc4TTF3K2N4RnJLQWhoSgpWeHM4WFJF
+    UGFYVEZMMmJFTUc0a1M2eVhCd0tCZ1FEbDJoUnBrNzVhWTMxZzY0Wjk5ZTN2ZnRMRlJYZ0
+    JUUTYrCmg4aTZpbldnNUJVSEVKWUEycWFLeFYzRG1iY21iNVZGYUF4bFR2K2ovb3EvZ0E3
+    VytMcHFHNGEwVG1OTVpxOXYKRTdHTHV5WHF3TTJiN3BDV2o0SUVMVFJ5ekRrMlBlcnlLRD
+    NoczU2Z2pIVU9FRjdlczVxeU8zL1lCZGpEakljVwpwN0JFR0hLLzZ3S0JnRzBGc0VZbUlF
+    a3VwTWVCM2tqRmVxR1ltRzMxTTR0L0llYnBrOTNJVE80aXdZQXBtTUZSCkxrOXZuaUZrTE
+    tzdkVNbStpNDU1V2V5bHNtT1JGSmNOTHZpWWZPeDduVXJCdThlK0xrNzd6a1N3bVR4UzhQ
+    emwKb2NHU0V2SitWcTVpKzRuZyszNm1EVkZ1U1RtN3pJTjJhVFlXZnlFSFhnOUQxK2JGeD
+    JHdElPa2JBb0dCQUk0ZwpSemJ4VUdiNzFlODBNN2wzZEdUKytyMVlzMWU2bWo5ZUh0U2FB
+    Um8zYm5rcjNGVXkzb0E0Z2o0TXNwOWxwOXQrCjl3czl5ZjFSeStHV0FaY1R2ZEVXckRpWn
+    IvVHlHZENKVU9PaUdWUUxYQmZyY0NScElIQU1zNzI0WWpnVUdVOGIKYXdoQTFQbFpZSmdO
+    cjF2dG10NVN4RDZEZndHTHg0eE9yRU92Q21WNUFvR0JBTFFRTWxDQlQvOHc3UzBCRWNLVA
+    p2S25EUlRFdjNuMktGeUJHeFVkdlpnamVFSFNYeVR0U2VTeUF6aVVvZ016MDJCQWIzcnlp
+    WlhiL09jR3cyUE85CkMrVDIyRk5QVzdYYmhTaFJYMGJBNzN3V0FCbVQzTjgrNU9GU0lWKz
+    ZLRUFEQmdhbGt1ZEFTMklCdlh5ek45L3kKTlF0bU04Z0RrL0hudmtrNnAvZENkaFdGCi0t
+    LS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+  node.pem: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURHekNDQWdNQ0ZDNWltUWlkUHpwY0
+    RnMGZ5SHR1Sm44UTNrVVNNQTBHQ1NxR1NJYjNEUUVCQ3dVQU1FWXgKQ3pBSkJnTlZCQVlU
+    QWxWVE1STXdFUVlEVlFRSERBcERZV3hwWm05eWJtbGhNUkF3RGdZRFZRUUtEQWREYjIxdw
+    pZVzU1TVJBd0RnWURWUVFEREFkeWIyOTBMV05oTUI0WERUSXhNVEV4TXpFd01UQXpPVm9Y
+    RFRNeE1URXhNVEV3Ck1UQXpPVm93VGpFTE1Ba0dBMVVFQmhNQ1ZWTXhFekFSQmdOVkJBY0
+    1Da05oYkdsbWIzSnVhV0V4RURBT0JnTlYKQkFvTUIwTnZiWEJoYm5reEdEQVdCZ05WQkFN
+    TUR5b3VaV3hoYzNScFkzTmxZWEpqYURDQ0FTSXdEUVlKS29aSQpodmNOQVFFQkJRQURnZ0
+    VQQURDQ0FRb0NnZ0VCQU5xQ0wya2lLMzFDUjdlODF2VjdRRlhkWmg0WWtoQXdCMlNQCnJX
+    MmplSXVreEpRZ2s2ZnRSaVpBSUxoTTU0K1RVR1pZRGg0ZnVhMWdhZldINHFNM0VYcWZEa1
+    ZPS2lVNGI5ZXYKWEZMTXh1c1FJZmZjaGlxUzVYbzUxNEkrZDFaNXkxa2pTT0dGc1JZYStM
+    aGtjQ0dwUjhUWnBUQ20xUDBBQ2UrZApvMzNGSnpxV1lRQWUxcmd1UEhlSFlhaDVrWHVmSG
+    dsZTZ5dXU4TDlDRTRtN3pXU0dGaVBYcFY0MmNPYng5Zy9PCkhMRXFSUjhvMVp5czZpelVh
+    M1E4ZTlNbHRsdFB3eUJtNkVlWE5OTUVIVVluSUNDUERWczRWMTA3OVlacjNrcisKSmV5M3
+    VYWDVFV1Y4Vi85VlVtNmpZT3BydGFPZERGbDV3UGlyUFBpSGp5SCtweVU2M0cwQ0F3RUFB
+    VEFOQmdrcQpoa2lHOXcwQkFRc0ZBQU9DQVFFQVFYQ3FZZlN6cHh5ays2M0Yzd1JKbzQwcF
+    VmNEFGN3J1RW1HY2Y0N0I4bThIClZUSjhiem1teVQ2ZElLNHp1TEU3YTZ1NzdOSFkvQlBz
+    ZU1WRlBLR0gyV2tXTjNod3luWlRHeVRBUm02b2NCdTEKVmc2bDlySGI4eHVFU0lTOG1WWD
+    VvVmYxK1ZyWURoQVZYLzVLUVJmb25BeU41a3lGQmVQQUY1dDR5QUp5U055NgpEWXlrNEpu
+    M3krQ1ZrY0RYNE9lSXdubW9uNGJPSXhiUWZrYUUvRE9Qem8rT3k5SlZ4MjQzc0Y4Sm9Qbm
+    I2NHI2CmptMDBiRFB6eDl3RzlPMnNCZmhNeGNIV0UxUHBWNjlNaGRGcTdQRzM2alVVc2Nx
+    eVZEcHEvdXZhYjhhR3VrMEgKZHRqYVp1Rzg1NmhGWE9NUHgyeCt4MVJFWGFuNnJWYVl6SH
+    hndGNLeHJBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  root-ca.pem: |
+    LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURiVENDQWxXZ0F3SUJBZ0lVWG5BQz
+    ZzeURMQWxiZVhtM0RsaXg2ZU8vRW9Vd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1JqRUxNQWtH
+    QTFVRUJoTUNWVk14RXpBUkJnTlZCQWNNQ2tOaGJHbG1iM0p1YVdFeEVEQU9CZ05WQkFvTQ
+    pCME52YlhCaGJua3hFREFPQmdOVkJBTU1CM0p2YjNRdFkyRXdIaGNOTWpFeE1URXpNVEF4
+    TURNNFdoY05NekV4Ck1URXhNVEF4TURNNFdqQkdNUXN3Q1FZRFZRUUdFd0pWVXpFVE1CRU
+    dBMVVFQnd3S1EyRnNhV1p2Y201cFlURVEKTUE0R0ExVUVDZ3dIUTI5dGNHRnVlVEVRTUE0
+    R0ExVUVBd3dIY205dmRDMWpZVENDQVNJd0RRWUpLb1pJaHZjTgpBUUVCQlFBRGdnRVBBRE
+    NDQVFvQ2dnRUJBSyt4eThPUDI0dXJVbFVsNFNReTdjSExpR2FTS0lSM050U1dDY2dDCi90
+    UzA1WGxyRHBKWHIyNzU3V2xtL1FXVnNTdENiVkJvQWVrTXNXcTRqZnB0NklqaHByMm16Rm
+    p3QzhsYnJzNHAKZ0lkczIyVFZvZVFFZGxsN3JpeUczcmgyWU9HYW9BZndseXduVHFoeDB6
+    a2k2ODdBajhxeGRhN1hqVVlxR1JDMAp1UmdWU3dKdVpCVlBSTml0WE4wTnJQWnNUeFY5RE
+    NBeStoakRXSFBnS0R5QlRCcXI3RWszYVpxVnVBRlNYWEUrCkJidHczdG11cEc4c2hzaVJP
+    KzJ3R204bWg1emd0SUQ2eDc0VXZpeXpudkd4MmZ4UVBFSkRlZlNjMDBCMTlka1UKb2hMbj
+    NZY0taR0RPRDVaZTZHQlEwamlpTGJLMmZlb2dqMVVtSGRnQmFZZ2NjSVVDQXdFQUFhTlRN
+    RkV3SFFZRApWUjBPQkJZRUZEMTBleGN1V2N5dXh3dFJYMUcwUlhyYjRVc2ZNQjhHQTFVZE
+    l3UVlNQmFBRkQxMGV4Y3VXY3l1Cnh3dFJYMUcwUlhyYjRVc2ZNQThHQTFVZEV3RUIvd1FG
+    TUFNQkFmOHdEUVlKS29aSWh2Y05BUUVMQlFBRGdnRUIKQUhvcFBrN3NPL0pFdktCUFJ2Ym
+    JLcUpVNW53Q1VpYVBTY3pXZE5jbGs5dkh3eTJta2x5UVUxbmwxdTFlUDg3WApidFpvSVZ4
+    bTNEOVgwWEVhczJQM2g0TlBxbks3Tis2S051a3FBNWoxWUdtKzR6cGQyYVB5UWI2aHhoNH
+    g1aU8rCkl4Q1MzQ2taMlN2NmxNY2U4QTJnL25WZUVkMmR1M1phNXB0L1ZXSkY5SzFVUW8r
+    N0w2WVYrbmxxMjNoY1NxY3IKRVNMMU5kd2M4TkxsMGxkYXlMaUxsTWZYaThaazJkTHlPMk
+    ZNOEx4cUd5ZGtnWHBYVnZyTE5CTDRmaUs3dVh6dAprU0QwZlU3TmFSMXdsalJvNEM5VTZJ
+    SVFPQnNBSFYxUHFpQkFwclcwamxTTkVCcVUrVlcxVURidkJPWStjTUFkCk91RVNJb2MwMV
+    VxR0FmRHV6a0ptLzNJPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+kind: Secret
+metadata:
+  name: odfe-ssl-certs-5bfggtck42
+  namespace: wazuh
+type: Opaque
+---
+apiVersion: v1
+data:
+  password: TXlTM2NyMzdQNDUwci4qLQ==
+  username: d2F6dWgtd3Vp
+kind: Secret
+metadata:
+  name: wazuh-api-cred
+  namespace: wazuh
+---
+apiVersion: v1
+data:
+  authd.pass: cGFzc3dvcmQ=
+kind: Secret
+metadata:
+  name: wazuh-authd-pass
+  namespace: wazuh
+---
+apiVersion: v1
+data:
+  key: MTIzYTQ1YmM2N2RlZjg5MWdoMjNpNDVqazY3bDhtbjk=
+kind: Secret
+metadata:
+  name: wazuh-cluster-key
+  namespace: wazuh
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: wazuh-elasticsearch
+  name: elasticsearch
+  namespace: wazuh
+spec:
+  ports:
+  - name: es-rest
+    port: 9200
+    targetPort: 9200
+  selector:
+    app: wazuh-elasticsearch
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: https
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+  labels:
+    app: wazuh-kibana
+  name: kibana
+  namespace: wazuh
+spec:
+  ports:
+  - name: kibana
+    port: 443
+    targetPort: 5601
+  selector:
+    app: wazuh-kibana
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+  labels:
+    app: wazuh-manager
+  name: wazuh
+  namespace: wazuh
+spec:
+  ports:
+  - name: registration
+    port: 1515
+    targetPort: 1515
+  - name: api
+    port: 55000
+    targetPort: 55000
+  selector:
+    app: wazuh-manager
+    node-type: master
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: wazuh-manager
+  name: wazuh-cluster
+  namespace: wazuh
+spec:
+  clusterIP: None
+  ports:
+  - name: cluster
+    port: 1516
+    targetPort: 1516
+  selector:
+    app: wazuh-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: wazuh-elasticsearch
+  name: wazuh-elasticsearch
+  namespace: wazuh
+spec:
+  clusterIP: None
+  ports:
+  - name: es-nodes
+    port: 9300
+    targetPort: 9300
+  selector:
+    app: wazuh-elasticsearch
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: 0.0.0.0/0
+  labels:
+    app: wazuh-manager
+  name: wazuh-workers
+  namespace: wazuh
+spec:
+  ports:
+  - name: agents-events
+    port: 1514
+    targetPort: 1514
+  selector:
+    app: wazuh-manager
+    node-type: worker
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-kibana
+  namespace: wazuh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wazuh-kibana
+  template:
+    metadata:
+      labels:
+        app: wazuh-kibana
+      name: wazuh-kibana
+    spec:
+      containers:
+      - env:
+        - name: ELASTICSEARCH_URL
+          value: https://wazuh-elasticsearch-0.wazuh-elasticsearch:9200
+        - name: ELASTICSEARCH_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: elastic-cred
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: elastic-cred
+        - name: SERVER_SSL_ENABLED
+          value: "true"
+        - name: SERVER_SSL_CERTIFICATE
+          value: /usr/share/kibana/config/cert.pem
+        - name: SERVER_SSL_KEY
+          value: /usr/share/kibana/config/key.pem
+        - name: WAZUH_API_URL
+          value: https://wazuh-manager-master-0.wazuh-cluster
+        - name: API_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: wazuh-api-cred
+        - name: API_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: wazuh-api-cred
+        image: wazuh/wazuh-kibana-odfe:4.2.4
+        name: wazuh-kibana
+        ports:
+        - containerPort: 5601
+          name: kibana
+        resources:
+          limits:
+            cpu: 400m
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 512Mi
+        volumeMounts:
+        - mountPath: /usr/share/kibana/config/cert.pem
+          name: kibana-certs
+          readOnly: true
+          subPath: cert.pem
+        - mountPath: /usr/share/kibana/config/key.pem
+          name: kibana-certs
+          readOnly: true
+          subPath: key.pem
+      volumes:
+      - name: kibana-certs
+        secret:
+          secretName: kibana-certs-94k5g5kdc2
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-elasticsearch
+  namespace: wazuh
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: wazuh-elasticsearch
+  serviceName: wazuh-elasticsearch
+  template:
+    metadata:
+      labels:
+        app: wazuh-elasticsearch
+      name: wazuh-elasticsearch
+    spec:
+      containers:
+      - env:
+        - name: ES_JAVA_OPTS
+          value: -Xms1g -Xmx1g
+        - name: CLUSTER_NAME
+          value: wazuh
+        - name: NETWORK_HOST
+          value: 0.0.0.0
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: DISCOVERY_SERVICE
+          value: wazuh-elasticsearch
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: DISABLE_INSTALL_DEMO_CONFIG
+          value: "true"
+        image: amazon/opendistro-for-elasticsearch:1.13.2
+        name: wazuh-elasticsearch
+        ports:
+        - containerPort: 9200
+          name: es-rest
+        - containerPort: 9300
+          name: es-nodes
+        resources:
+          limits:
+            cpu: 1
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            add:
+            - SYS_CHROOT
+        volumeMounts:
+        - mountPath: /usr/share/elasticsearch/data
+          name: wazuh-elasticsearch
+        - mountPath: /usr/share/elasticsearch/config/node-key.pem
+          name: odfe-ssl-certs
+          readOnly: true
+          subPath: node-key.pem
+        - mountPath: /usr/share/elasticsearch/config/node.pem
+          name: odfe-ssl-certs
+          readOnly: true
+          subPath: node.pem
+        - mountPath: /usr/share/elasticsearch/config/root-ca.pem
+          name: odfe-ssl-certs
+          readOnly: true
+          subPath: root-ca.pem
+        - mountPath: /usr/share/elasticsearch/config/admin.pem
+          name: odfe-ssl-certs
+          readOnly: true
+          subPath: admin.pem
+        - mountPath: /usr/share/elasticsearch/config/admin-key.pem
+          name: odfe-ssl-certs
+          readOnly: true
+          subPath: admin-key.pem
+        - mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+          name: elastic-odfe-conf
+          readOnly: true
+          subPath: elasticsearch.yml
+        - mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/internal_users.yml
+          name: elastic-odfe-conf
+          readOnly: true
+          subPath: internal_users.yml
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - chown -R 1000:1000 /usr/share/elasticsearch/data
+        image: busybox
+        name: volume-mount-hack
+        resources:
+          limits:
+            cpu: 100m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+        volumeMounts:
+        - mountPath: /usr/share/elasticsearch/data
+          name: wazuh-elasticsearch
+      - command:
+        - sysctl
+        - -w
+        - vm.max_map_count=262144
+        image: busybox
+        name: increase-the-vm-max-map-count
+        securityContext:
+          privileged: true
+      volumes:
+      - name: odfe-ssl-certs
+        secret:
+          secretName: odfe-ssl-certs-5bfggtck42
+      - configMap:
+          name: elastic-odfe-conf-5b9hg68586
+        name: elastic-odfe-conf
+  volumeClaimTemplates:
+  - metadata:
+      name: wazuh-elasticsearch
+      namespace: es-cluster
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: wazuh-storage
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-manager-master
+  namespace: wazuh
+spec:
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wazuh-manager
+      node-type: master
+  serviceName: wazuh-cluster
+  template:
+    metadata:
+      labels:
+        app: wazuh-manager
+        node-type: master
+      name: wazuh-manager-master
+    spec:
+      containers:
+      - env:
+        - name: ELASTICSEARCH_URL
+          value: https://wazuh-elasticsearch-0.wazuh-elasticsearch:9200
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: elastic-cred
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: elastic-cred
+        - name: FILEBEAT_SSL_VERIFICATION_MODE
+          value: none
+        - name: SSL_CERTIFICATE_AUTHORITIES
+          value: /etc/ssl/root-ca.pem
+        - name: SSL_CERTIFICATE
+          value: /etc/ssl/filebeat.pem
+        - name: SSL_KEY
+          value: /etc/ssl/filebeat.key
+        - name: API_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: wazuh-api-cred
+        - name: API_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: wazuh-api-cred
+        - name: WAZUH_CLUSTER_KEY
+          valueFrom:
+            secretKeyRef:
+              key: key
+              name: wazuh-cluster-key
+        image: wazuh/wazuh-odfe:4.2.4
+        name: wazuh-manager
+        ports:
+        - containerPort: 1515
+          name: registration
+        - containerPort: 1516
+          name: cluster
+        - containerPort: 55000
+          name: api
+        resources:
+          limits:
+            cpu: 2
+            memory: 2Gi
+          requests:
+            cpu: 1
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            add:
+            - SYS_CHROOT
+        volumeMounts:
+        - mountPath: /wazuh-config-mount/etc/ossec.conf
+          name: config
+          readOnly: true
+          subPath: master.conf
+        - mountPath: /etc/ssl/root-ca.pem
+          name: filebeat-certs
+          readOnly: true
+          subPath: root-ca.pem
+        - mountPath: /etc/ssl/filebeat.pem
+          name: filebeat-certs
+          readOnly: true
+          subPath: filebeat.pem
+        - mountPath: /etc/ssl/filebeat.key
+          name: filebeat-certs
+          readOnly: true
+          subPath: filebeat-key.pem
+        - mountPath: /wazuh-config-mount/etc/authd.pass
+          name: wazuh-authd-pass
+          readOnly: true
+          subPath: authd.pass
+        - mountPath: /var/ossec/api/configuration
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/api/configuration
+        - mountPath: /var/ossec/etc
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/etc
+        - mountPath: /var/ossec/logs
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/logs
+        - mountPath: /var/ossec/queue
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/queue
+        - mountPath: /var/ossec/var/multigroups
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/var/multigroups
+        - mountPath: /var/ossec/integrations
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/integrations
+        - mountPath: /var/ossec/active-response/bin
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/active-response/bin
+        - mountPath: /var/ossec/agentless
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/agentless
+        - mountPath: /var/ossec/wodles
+          name: wazuh-manager-master
+          subPath: wazuh/var/ossec/wodles
+        - mountPath: /etc/filebeat
+          name: wazuh-manager-master
+          subPath: filebeat/etc/filebeat
+        - mountPath: /var/lib/filebeat
+          name: wazuh-manager-master
+          subPath: filebeat/var/lib/filebeat
+      volumes:
+      - configMap:
+          name: wazuh-conf-5bc7t8k9h7
+        name: config
+      - name: filebeat-certs
+        secret:
+          secretName: odfe-ssl-certs-5bfggtck42
+      - name: wazuh-authd-pass
+        secret:
+          secretName: wazuh-authd-pass
+  volumeClaimTemplates:
+  - metadata:
+      name: wazuh-manager-master
+      namespace: wazuh
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi
+      storageClassName: wazuh-storage
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-manager-worker
+  namespace: wazuh
+spec:
+  podManagementPolicy: Parallel
+  replicas: 2
+  selector:
+    matchLabels:
+      app: wazuh-manager
+      node-type: worker
+  serviceName: wazuh-cluster
+  template:
+    metadata:
+      labels:
+        app: wazuh-manager
+        node-type: worker
+      name: wazuh-manager-worker
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - env:
+        - name: ELASTICSEARCH_URL
+          value: https://wazuh-elasticsearch-0.wazuh-elasticsearch:9200
+        - name: ELASTIC_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: elastic-cred
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: elastic-cred
+        - name: FILEBEAT_SSL_VERIFICATION_MODE
+          value: none
+        - name: SSL_CERTIFICATE_AUTHORITIES
+          value: /etc/ssl/root-ca.pem
+        - name: SSL_CERTIFICATE
+          value: /etc/ssl/filebeat.pem
+        - name: SSL_KEY
+          value: /etc/ssl/filebeat.key
+        - name: WAZUH_CLUSTER_KEY
+          valueFrom:
+            secretKeyRef:
+              key: key
+              name: wazuh-cluster-key
+        image: wazuh/wazuh-odfe:4.2.4
+        name: wazuh-manager
+        ports:
+        - containerPort: 1514
+          name: agents-events
+        - containerPort: 1516
+          name: cluster
+        resources:
+          limits:
+            cpu: 2
+            memory: 2Gi
+          requests:
+            cpu: 1
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            add:
+            - SYS_CHROOT
+        volumeMounts:
+        - mountPath: /wazuh-config-mount/etc/ossec.conf
+          name: config
+          readOnly: true
+          subPath: worker.conf
+        - mountPath: /etc/ssl/root-ca.pem
+          name: filebeat-certs
+          readOnly: true
+          subPath: root-ca.pem
+        - mountPath: /etc/ssl/filebeat.pem
+          name: filebeat-certs
+          readOnly: true
+          subPath: filebeat.pem
+        - mountPath: /etc/ssl/filebeat.key
+          name: filebeat-certs
+          readOnly: true
+          subPath: filebeat-key.pem
+        - mountPath: /var/ossec/api/configuration
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/api/configuration
+        - mountPath: /var/ossec/etc
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/etc
+        - mountPath: /var/ossec/logs
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/logs
+        - mountPath: /var/ossec/queue
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/queue
+        - mountPath: /var/ossec/var/multigroups
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/var/multigroups
+        - mountPath: /var/ossec/integrations
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/integrations
+        - mountPath: /var/ossec/active-response/bin
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/active-response/bin
+        - mountPath: /var/ossec/agentless
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/agentless
+        - mountPath: /var/ossec/wodles
+          name: wazuh-manager-worker
+          subPath: wazuh/var/ossec/wodles
+        - mountPath: /etc/filebeat
+          name: wazuh-manager-worker
+          subPath: filebeat/etc/filebeat
+        - mountPath: /var/lib/filebeat
+          name: wazuh-manager-worker
+          subPath: filebeat/var/lib/filebeat
+      volumes:
+      - configMap:
+          name: wazuh-conf-5bc7t8k9h7
+        name: config
+      - name: filebeat-certs
+        secret:
+          secretName: odfe-ssl-certs-5bfggtck42
+  volumeClaimTemplates:
+  - metadata:
+      name: wazuh-manager-worker
+      namespace: wazuh
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi
+      storageClassName: wazuh-storage
