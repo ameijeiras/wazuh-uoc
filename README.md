@@ -23,7 +23,7 @@ The [instructions.md](instructions.md) file describes how to deploy Wazuh on Kub
 
 ## Local development
 
-bla bla
+bla bla bla
 
 ## Credits and Thank you
 
