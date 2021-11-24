@@ -11,6 +11,7 @@ Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implement
  [instructions.md](instructions.md) 
 
 ## Estructura de directorios
+```
 .
 ├── CHANGELOG.md
 ├── LICENSE
@@ -146,7 +147,7 @@ Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implement
             └── wazuh-worker-sts.yaml
 
 32 directories, 100 files
-
+```
 
 > **_NOTE:_**  Nota
 
