@@ -3,16 +3,150 @@
 
 Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implementado en Amazon EKS
 
-## Architecture
+## Arquitectura
 ![Imagen de la arquitectura](https://github.com/ameijeiras/wazuh-uoc/blob/main/recursos/ArquitecturaTFMV1.drawio.png?raw=true)
 
-## Documentation
+## Documentación
 
  [instructions.md](instructions.md) 
 
-## Directory structure
+## Estructura de directorios
+.
+├── CHANGELOG.md
+├── LICENSE
+├── quickstart
+│   ├── 1Namespace.yaml
+│   ├── 2Storage.yaml
+│   ├── 3Data.yaml
+│   ├── 5Services.yaml
+│   ├── 6Kibana.yaml
+│   ├── 7Elastic.yaml
+│   ├── 8WazuhManager.yaml
+│   ├── 9WazuhWorker.yaml
+│   └── todo.yaml
+├── README.md
+├── recursos
+│   ├── ArquitecturaTFMV1.drawio.png
+│   └── Portada.png
+├── VERSION
+├── wazuh
+│   ├── base
+│   │   ├── storage-class.yaml
+│   │   └── wazuh-ns.yaml
+│   ├── certs
+│   │   ├── kibana_http
+│   │   │   └── generate_certs.sh
+│   │   └── odfe_cluster
+│   │       └── generate_certs.sh
+│   ├── elastic_stack
+│   │   ├── elasticsearch
+│   │   │   ├── cluster
+│   │   │   │   ├── elasticsearch-api-svc.yaml
+│   │   │   │   └── elasticsearch-sts.yaml
+│   │   │   ├── elastic_conf
+│   │   │   │   ├── elasticsearch.yml
+│   │   │   │   └── internal_users.yml
+│   │   │   └── elasticsearch-svc.yaml
+│   │   └── kibana
+│   │       ├── kibana-deploy.yaml
+│   │       └── kibana-svc.yaml
+│   ├── kustomization.yml
+│   ├── secrets
+│   │   ├── elastic-cred-secret.yaml
+│   │   ├── wazuh-api-cred-secret.yaml
+│   │   ├── wazuh-authd-pass-secret.yaml
+│   │   └── wazuh-cluster-key-secret.yaml
+│   └── wazuh_managers
+│       ├── wazuh-cluster-svc.yaml
+│       ├── wazuh_conf
+│       │   ├── master.conf
+│       │   └── worker.conf
+│       ├── wazuh-master-sts.yaml
+│       ├── wazuh-master-svc.yaml
+│       ├── wazuh-workers-svc.yaml
+│       └── wazuh-worker-sts.yaml
+└── wazuh-kubernetes
+    ├── CHANGELOG.md
+    ├── cleanup.md
+    ├── envs
+    │   ├── eks
+    │   │   ├── elastic-resources.yaml
+    │   │   ├── kibana-resources.yaml
+    │   │   ├── kustomization.yml
+    │   │   ├── storage-class.yaml
+    │   │   ├── wazuh-master-resources.yaml
+    │   │   └── wazuh-worker-resources.yaml
+    │   └── local-env
+    │       ├── elastic-resources.yaml
+    │       ├── kustomization.yml
+    │       ├── storage-class.yaml
+    │       └── wazuh-resources.yaml
+    ├── instructions.md
+    ├── LICENSE
+    ├── local-environment.md
+    ├── README.md
+    ├── upgrade.md
+    ├── VERSION
+    └── wazuh
+        ├── base
+        │   ├── storage-class.yaml
+        │   └── wazuh-ns.yaml
+        ├── certs
+        │   ├── kibana_http
+        │   │   ├── cert.pem
+        │   │   ├── generate_certs.sh
+        │   │   └── key.pem
+        │   └── odfe_cluster
+        │       ├── admin.csr
+        │       ├── admin-key.pem
+        │       ├── admin-key-temp.pem
+        │       ├── admin.pem
+        │       ├── filebeat.csr
+        │       ├── filebeat-key.pem
+        │       ├── filebeat-key-temp.pem
+        │       ├── filebeat.pem
+        │       ├── generate_certs.sh
+        │       ├── kibana.csr
+        │       ├── kibana-key.pem
+        │       ├── kibana-key-temp.pem
+        │       ├── kibana.pem
+        │       ├── node.csr
+        │       ├── node-key.pem
+        │       ├── node-key-temp.pem
+        │       ├── node.pem
+        │       ├── root-ca-key.pem
+        │       ├── root-ca.pem
+        │       └── root-ca.srl
+        ├── elastic_stack
+        │   ├── elasticsearch
+        │   │   ├── cluster
+        │   │   │   ├── elasticsearch-api-svc.yaml
+        │   │   │   └── elasticsearch-sts.yaml
+        │   │   ├── elastic_conf
+        │   │   │   ├── elasticsearch.yml
+        │   │   │   └── internal_users.yml
+        │   │   └── elasticsearch-svc.yaml
+        │   └── kibana
+        │       ├── kibana-deploy.yaml
+        │       └── kibana-svc.yaml
+        ├── kustomization.yml
+        ├── secrets
+        │   ├── elastic-cred-secret.yaml
+        │   ├── wazuh-api-cred-secret.yaml
+        │   ├── wazuh-authd-pass-secret.yaml
+        │   └── wazuh-cluster-key-secret.yaml
+        └── wazuh_managers
+            ├── wazuh-cluster-svc.yaml
+            ├── wazuh_conf
+            │   ├── master.conf
+            │   └── worker.conf
+            ├── wazuh-master-sts.yaml
+            ├── wazuh-master-svc.yaml
+            ├── wazuh-workers-svc.yaml
+            └── wazuh-worker-sts.yaml
 
-[Tree]
+32 directories, 100 files
+
 
 > **_NOTE:_**  Nota
 
@@ -54,4 +188,4 @@ Copyright (C) 2021 angel[@]ameijeiras[.]es  (License GPLv2)
 
 ## References
 
-
+https://github.com/wazuh/wazuh-kubernetes.git
