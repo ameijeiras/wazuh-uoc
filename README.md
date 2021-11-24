@@ -8,13 +8,13 @@ Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implement
 
 ## Documentation
 
-The [instructions.md](instructions.md) file describes how to deploy Wazuh on Kubernetes.
+ [instructions.md](instructions.md) 
 
 ## Directory structure
 
 [Tree]
 
-TEST [^note]
+> **_NOTE:_**  The note content.
 
 
 ## Branches
