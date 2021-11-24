@@ -14,6 +14,7 @@ The [instructions.md](instructions.md) file describes how to deploy Wazuh on Kub
 
 [Tree]
 
+TEST [^note]
 
 
 ## Branches
