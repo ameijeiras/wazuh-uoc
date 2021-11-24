@@ -14,12 +14,12 @@ Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implement
 
 [Tree]
 
-> **_NOTE:_**  The note content.
+> **_NOTE:_**  Nota
 
 
 ## Branches
 
-* La rama `master` contiene la última versión del código.
+* La rama `main` contiene la última versión del código.
 
 
 ## Despligue
@@ -34,7 +34,14 @@ kubbectl apply -d todo.yaml
 ```
 
 ### Despliegue manual
-
+Este es el modo de despligue manual. En primer lugar es necesario crear los certificados que se van a emplear para securizar las comunicaciones de los distintos sistemas. A continuación, a través del fichero kustomize.yaml podemos ajustar la configuración del despligue (nodos, afinidad, recursos por servicio, etc) en función de nuestra necesidades.
+```
+git clone https://github.com/ameijeiras/wazuh-uoc.git
+cd wazuh-uoc/wazuh/
+./certs/kibana_http/generate_certs.sh
+./certs/odfe_cluster/generate_certs.sh 
+kubectl apply -k .
+```
 
 ## Credits and Thank you
 
