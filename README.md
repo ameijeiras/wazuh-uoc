@@ -21,9 +21,19 @@ The [instructions.md](instructions.md) file describes how to deploy Wazuh on Kub
 * La rama `master` contiene la última versión del código.
 
 
-## Local development
+## Despligue
+Existen dos formas de desplegar el entorno Wazuh sobre un cluster Kubernetes dentro del servicio Amazon EKS.
+En ambos casos, es necesario disponer previamente de de un entorno EKS con AWS cli y kubectl instalado en el equipo desde el que se vaya a realizar el despliegue.
+### Despliegue Rápido
+Este es el modo de despligue para impacientes. Se incluyen los ficheros de configuración de API de kubernetes preparados para un despliegue rapido. Se incluyen embebidos los certificados y datos de configuración necesarios que un despliegue rápido. Se incluyen por defecto en la configuración 2 nodos workers de wazuh y 2 nodos de elastic.
+```
+git clone https://github.com/ameijeiras/wazuh-uoc.git
+cd quickstart
+kubbectl apply -d todo.yaml
+```
 
-bla bla bla
+### Despliegue manual
+
 
 ## Credits and Thank you
 
