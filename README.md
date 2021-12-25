@@ -6,9 +6,18 @@ Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implement
 ## Arquitectura
 ![Imagen de la arquitectura](https://github.com/ameijeiras/wazuh-uoc/blob/main/recursos/ArquitecturaTFMV1.drawio.png?raw=true)
 
-## Documentación
+## Videos
+A continuación se detallan unos videos explicativos donde se detallan y verifican todos los pasos del proceso de despliegue así como el detalle de las pruebas de concepto realizadas
 
- [instructions.md](instructions.md) 
+ [Video Puesta en marcha de la solucion](https://drive.google.com/file/d/1q2cIuL8bMw6jz2Pe9LAcRswPNlFrSfYq/view?usp=sharing)
+ 
+ [Video POC1 - Monitorización de seguridad de los servicios del entorno cloud AWS ](https://drive.google.com/file/d/1m7FZ_bfiM5zVmjZ3kWsgq-wL2vmFTyG4/view?usp=sharing)
+ 
+ [Video POC2 - Monitorización de seguridad de las cargas de trabajo en los nodos AWS](https://drive.google.com/file/d/1jvEet62Stf30F4fvHZ2XTq6tza5pQJLP/view?usp=sharing)
+ 
+ [Video POC3 - Detección y mitigación de malware a través de la integración con
+VirusTotal](https://drive.google.com/file/d/1o6isgdswpX9IjGtRGnDXkDKd8JPnAhDz/view?usp=sharing)
+
 
 ## Estructura de directorios
 ```
@@ -68,7 +77,6 @@ Despliegue de un cluster del SIEM Wazuh sobre un entorno de Kubernetes implement
 │       └── wazuh-worker-sts.yaml
 ```
 
-> **_NOTE:_**  Nota
 
 
 ## Branches
